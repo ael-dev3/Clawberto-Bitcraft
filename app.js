@@ -84,20 +84,20 @@ terrainLayer.addTo(map);
 const regionLayer = L.layerGroup().addTo(map);
 const resourceLayer = L.layerGroup().addTo(map);
 const markerLayer = L.layerGroup().addTo(map);
-const trackedMarkerLayer = L.layerGroup().addTo(map);
+const playerDotLayer = L.layerGroup().addTo(map);
+const playerLabelLayer = L.layerGroup().addTo(map);
 const resourceRenderer = L.canvas({ padding: 0.5 });
 
-const aelMarker = L.marker([0, 0], {
-  icon: L.divIcon({ className: 'ael-marker', iconSize: [18, 18], iconAnchor: [9, 9] }),
-});
 let manualMarker = null;
 let aelKnown = false;
+let aelState = null;
 let runtimeCache = null;
 let trackedRuntimeCache = [];
 let trackedPlayerConfig = [];
 let terrainReady = false;
 const trackedPlayers = new Map();
-const trackedMarkers = new Map();
+const playerDotMarkers = new Map();
+const playerLabelMarkers = new Map();
 
 dom.entityId.textContent = DEFAULT_PLAYER.entityId;
 dom.requestedRegions.textContent = '12 (fixed build)';
@@ -129,9 +129,8 @@ async function boot() {
 
 function setupButtons() {
   dom.recenterBtn.addEventListener('click', () => {
-    if (!aelKnown) return;
-    const ll = aelMarker.getLatLng();
-    map.setView(ll, Math.max(map.getZoom(), 1.2));
+    if (!aelState || !Number.isFinite(aelState.x) || !Number.isFinite(aelState.z)) return;
+    map.setView([aelState.z, aelState.x], Math.max(map.getZoom(), 1.2));
   });
 
   dom.manualPinBtn.addEventListener('click', () => {
@@ -296,26 +295,33 @@ function connectLiveFeeds() {
 }
 
 function setAelPosition({ x, z, regionId, timestamp, source, recenter }) {
-  const latLng = [z, x];
-  aelMarker.setLatLng(latLng);
-  if (!markerLayer.hasLayer(aelMarker)) markerLayer.addLayer(aelMarker);
-  aelMarker.bindPopup(`Ael<br>X ${x.toFixed(3)}<br>Z ${z.toFixed(3)}<br>Region ${regionId ?? 'unknown'}<br>Source ${source}`);
+  aelState = {
+    username: DEFAULT_PLAYER.username,
+    entityId: DEFAULT_PLAYER.entityId,
+    x,
+    z,
+    regionId: regionId ?? regionIdFromCoord(x, z),
+    timestamp,
+    source,
+    signedIn: true,
+  };
 
   dom.coordSource.textContent = source;
   dom.coordX.textContent = x.toFixed(3);
   dom.coordZ.textContent = z.toFixed(3);
-  dom.coordRegion.textContent = String(regionId ?? regionIdFromCoord(x, z) ?? 'unknown');
+  dom.coordRegion.textContent = String(aelState.regionId ?? 'unknown');
   dom.coordTimestamp.textContent = timestamp ? String(timestamp) : 'unknown';
   aelKnown = true;
+  renderMapPlayers();
 
-  if (regionId != null && Number(regionId) !== FIXED_REGION_ID) {
-    dom.diagnosticsStatus.textContent = `Ael moved outside region 12 (now in region ${regionId}). This build stays locked to region 12.`;
+  if (aelState.regionId != null && Number(aelState.regionId) !== FIXED_REGION_ID) {
+    dom.diagnosticsStatus.textContent = `Ael moved outside region 12 (now in region ${aelState.regionId}). This build stays locked to region 12.`;
     dom.diagnosticsStatus.className = 'notice warn';
     return;
   }
 
   if (recenter && isInsideFixedRegion(x, z)) {
-    map.setView(latLng, Math.max(map.getZoom(), 1.2), { animate: false });
+    map.setView([z, x], Math.max(map.getZoom(), 1.2), { animate: false });
   }
 }
 
@@ -327,7 +333,7 @@ function updateTrackedPlayer(entityId, patch) {
 
 function renderTrackedPlayers() {
   renderTrackedPlayersList();
-  renderTrackedMarkers();
+  renderMapPlayers();
 }
 
 function renderTrackedPlayersList() {
@@ -352,47 +358,85 @@ function renderTrackedPlayersList() {
   }
 }
 
-function renderTrackedMarkers() {
-  const rows = Array.from(trackedPlayers.values()).filter((player) => Number.isFinite(player.x) && Number.isFinite(player.z) && isInsideFixedRegion(player.x, player.z) && Number(player.regionId ?? regionIdFromCoord(player.x, player.z)) === FIXED_REGION_ID);
-  const grouped = buildJitteredPositions(rows);
+function renderMapPlayers() {
+  const rows = getRenderablePlayers();
+  const labelPositions = buildLabelPositions(rows);
   const seen = new Set();
 
   for (const player of rows) {
-    const markerState = grouped.get(String(player.entityId));
-    if (!markerState) continue;
-    seen.add(String(player.entityId));
-    let marker = trackedMarkers.get(String(player.entityId));
-    if (!marker) {
-      marker = L.marker([markerState.z, markerState.x], {
+    const entityId = String(player.entityId);
+    seen.add(entityId);
+
+    let dotMarker = playerDotMarkers.get(entityId);
+    if (!dotMarker) {
+      dotMarker = L.marker([player.z, player.x], {
         icon: L.divIcon({
           className: '',
           iconSize: [12, 12],
           iconAnchor: [6, 6],
-          html: `<div class="friend-marker"><div class="friend-marker-dot"></div><div class="friend-marker-label">${escapeHtml(player.username)}</div></div>`,
+          html: '<div class="friend-marker-dot"></div>',
         }),
       });
-      trackedMarkers.set(String(player.entityId), marker);
-      trackedMarkerLayer.addLayer(marker);
+      playerDotMarkers.set(entityId, dotMarker);
+      playerDotLayer.addLayer(dotMarker);
     }
-    marker.setLatLng([markerState.z, markerState.x]);
-    marker.setIcon(L.divIcon({
+    dotMarker.setLatLng([player.z, player.x]);
+    dotMarker.bindPopup(`${player.username}<br>X ${player.x.toFixed(3)}<br>Z ${player.z.toFixed(3)}<br>Region ${player.regionId ?? 'unknown'}<br>Source ${player.source || 'unknown'}`);
+
+    const labelState = labelPositions.get(entityId) || { x: player.x, z: player.z - 140 };
+    let labelMarker = playerLabelMarkers.get(entityId);
+    const labelHtml = `<div class="friend-marker-label">${escapeHtml(player.username)}</div>`;
+    if (!labelMarker) {
+      labelMarker = L.marker([labelState.z, labelState.x], {
+        interactive: false,
+        keyboard: false,
+        icon: L.divIcon({
+          className: '',
+          iconSize: [10, 10],
+          iconAnchor: [5, 5],
+          html: labelHtml,
+        }),
+      });
+      playerLabelMarkers.set(entityId, labelMarker);
+      playerLabelLayer.addLayer(labelMarker);
+    }
+    labelMarker.setLatLng([labelState.z, labelState.x]);
+    labelMarker.setIcon(L.divIcon({
       className: '',
-      iconSize: [12, 12],
-      iconAnchor: [6, 6],
-      html: `<div class="friend-marker"><div class="friend-marker-dot"></div><div class="friend-marker-label">${escapeHtml(player.username)}</div></div>`,
+      iconSize: [10, 10],
+      iconAnchor: [5, 5],
+      html: labelHtml,
     }));
-    marker.bindPopup(`${player.username}<br>X ${player.x.toFixed(3)}<br>Z ${player.z.toFixed(3)}<br>Region ${player.regionId ?? 'unknown'}<br>Source ${player.source || 'unknown'}`);
   }
 
-  for (const [entityId, marker] of trackedMarkers.entries()) {
+  for (const [entityId, marker] of playerDotMarkers.entries()) {
     if (!seen.has(entityId)) {
-      trackedMarkerLayer.removeLayer(marker);
-      trackedMarkers.delete(entityId);
+      playerDotLayer.removeLayer(marker);
+      playerDotMarkers.delete(entityId);
+    }
+  }
+  for (const [entityId, marker] of playerLabelMarkers.entries()) {
+    if (!seen.has(entityId)) {
+      playerLabelLayer.removeLayer(marker);
+      playerLabelMarkers.delete(entityId);
     }
   }
 }
 
-function buildJitteredPositions(players) {
+function getRenderablePlayers() {
+  const rows = [];
+  if (aelState && Number.isFinite(aelState.x) && Number.isFinite(aelState.z) && isInsideFixedRegion(aelState.x, aelState.z) && Number(aelState.regionId ?? regionIdFromCoord(aelState.x, aelState.z)) === FIXED_REGION_ID) {
+    rows.push(aelState);
+  }
+  for (const player of trackedPlayers.values()) {
+    if (Number.isFinite(player.x) && Number.isFinite(player.z) && isInsideFixedRegion(player.x, player.z) && Number(player.regionId ?? regionIdFromCoord(player.x, player.z)) === FIXED_REGION_ID) {
+      rows.push(player);
+    }
+  }
+  return rows.sort((a, b) => a.username.localeCompare(b.username));
+}
+
+function buildLabelPositions(players) {
   const groups = new Map();
   for (const player of players) {
     const key = `${player.x.toFixed(3)}:${player.z.toFixed(3)}`;
@@ -402,14 +446,15 @@ function buildJitteredPositions(players) {
   const out = new Map();
   for (const group of groups.values()) {
     group.sort((a, b) => a.username.localeCompare(b.username));
-    const radius = Math.max(180, 34 * group.length); // widen crowded groups so labels are actually readable
+    if (group.length === 1) {
+      const p = group[0];
+      out.set(String(p.entityId), { x: p.x, z: p.z - 140 });
+      continue;
+    }
+    const radius = Math.max(220, 38 * group.length);
     for (let i = 0; i < group.length; i++) {
       const p = group[i];
-      if (group.length === 1) {
-        out.set(String(p.entityId), { x: p.x, z: p.z });
-        continue;
-      }
-      const angle = (Math.PI * 2 * i) / group.length;
+      const angle = -Math.PI / 2 + (Math.PI * 2 * i) / group.length;
       out.set(String(p.entityId), {
         x: p.x + Math.cos(angle) * radius,
         z: p.z + Math.sin(angle) * radius,
@@ -480,15 +525,7 @@ async function loadRequestedResourceSnapshots() {
 }
 
 function fitToKnownPlayers() {
-  const pts = [];
-  if (runtimeCache && Number.isFinite(runtimeCache.x) && Number.isFinite(runtimeCache.z) && isInsideFixedRegion(runtimeCache.x, runtimeCache.z)) {
-    pts.push([runtimeCache.z, runtimeCache.x]);
-  }
-  for (const player of trackedPlayers.values()) {
-    if (Number.isFinite(player.x) && Number.isFinite(player.z) && isInsideFixedRegion(player.x, player.z)) {
-      pts.push([player.z, player.x]);
-    }
-  }
+  const pts = getRenderablePlayers().map((player) => [player.z, player.x]);
   if (pts.length >= 2) {
     map.fitBounds(L.latLngBounds(pts), { padding: [80, 80], maxZoom: 1.2 });
   } else if (pts.length === 1) {
@@ -500,8 +537,8 @@ function refreshDiagnostics() {
   const parts = [];
   parts.push(terrainReady ? 'region12 terrain ok' : 'terrain pending');
   parts.push(runtimeCache ? 'ael cache ok' : 'no ael cache');
-  parts.push(trackedPlayers.size ? `${trackedPlayers.size} tracked players` : 'no tracked players');
-  parts.push(aelKnown ? 'ael marker ready' : 'no ael marker yet');
+  parts.push(`${trackedPlayers.size} tracked players + Ael`);
+  parts.push(aelKnown ? 'all map players rendered' : 'waiting on Ael');
   parts.push(`view z=${map.getZoom().toFixed(1)}`);
   dom.diagnosticsStatus.textContent = `Diagnostics: ${parts.join(' · ')}`;
   dom.diagnosticsStatus.className = aelKnown || terrainReady ? 'notice' : 'notice warn';

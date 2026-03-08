@@ -216,26 +216,16 @@ input[type="number"] {
   white-space: nowrap;
 }
 
-.friend-marker {
-  position: relative;
-  width: 12px;
-  height: 12px;
-}
-
 .friend-marker-dot {
   width: 12px;
   height: 12px;
   border-radius: 999px;
   background: #7cff9e;
   border: 2px solid #eafff0;
-  box-shadow: 0 0 0 5px rgba(124,255,158,0.14);
+  box-shadow: 0 0 0 4px rgba(124,255,158,0.14);
 }
 
 .friend-marker-label {
-  position: absolute;
-  left: 50%;
-  bottom: 16px;
-  transform: translateX(-50%);
   background: rgba(11,18,32,0.92);
   color: #ecf2ff;
   border: 1px solid rgba(124,255,158,0.45);
