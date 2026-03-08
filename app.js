@@ -372,9 +372,9 @@ function renderMapPlayers() {
       dotMarker = L.marker([player.z, player.x], {
         icon: L.divIcon({
           className: '',
-          iconSize: [12, 12],
-          iconAnchor: [6, 6],
-          html: '<div class="friend-marker-dot"></div>',
+          iconSize: [24, 24],
+          iconAnchor: [12, 12],
+          html: '<div class="friend-marker-hitbox"><div class="friend-marker-dot"></div></div>',
         }),
       });
       playerDotMarkers.set(entityId, dotMarker);
