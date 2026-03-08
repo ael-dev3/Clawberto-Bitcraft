@@ -1,0 +1,42 @@
+name: Smoke test overlay
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '13 * * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+
+      - name: Refresh runtime cache
+        run: node scripts/update-ael-live-cache.mjs
+
+      - name: Start local server
+        run: |
+          python3 -m http.server 8131 > /tmp/bitcraft-smoke-http.log 2>&1 &
+          echo $! > /tmp/bitcraft-smoke-http.pid
+
+      - name: Run local smoke test
+        run: node scripts/smoke-test-overlay.mjs http://127.0.0.1:8131/
+
+      - name: Run hosted smoke test
+        run: node scripts/smoke-test-overlay.mjs https://ael-dev3.github.io/Clawberto-Bitcraft/

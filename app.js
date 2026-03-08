@@ -1,12 +1,14 @@
 const MAP_SIZE = 38400;
 const REGION_GRID = 5;
-const REGION_SIZE = MAP_SIZE / REGION_GRID; // 7680
+const REGION_SIZE = MAP_SIZE / REGION_GRID;
 const APOTHEM = 2 / Math.sqrt(3);
-const EXPORTS_CDN = 'https://exports.bitjita.com';
 const LIVE_WS = 'wss://live.bitjita.com';
+const TERRAIN_URL = 'https://bitcraftmap.com/assets/maps/map.webp';
+const RUNTIME_AEL_CACHE_URL = './runtime/ael-live.json';
 const DEFAULT_PLAYER = {
   username: 'Ael',
   entityId: '648518346354069088',
+  defaultRegionId: 12,
 };
 
 const params = new URLSearchParams(window.location.search);
@@ -18,6 +20,7 @@ const requestedZoom = params.get('zoom') ? Number(params.get('zoom')) : null;
 const dom = {
   status: document.getElementById('status'),
   entityId: document.getElementById('entityId'),
+  coordSource: document.getElementById('coordSource'),
   coordX: document.getElementById('coordX'),
   coordZ: document.getElementById('coordZ'),
   coordRegion: document.getElementById('coordRegion'),
@@ -25,6 +28,7 @@ const dom = {
   requestedRegions: document.getElementById('requestedRegions'),
   requestedResources: document.getElementById('requestedResources'),
   resourceStatus: document.getElementById('resourceStatus'),
+  diagnosticsStatus: document.getElementById('diagnosticsStatus'),
   officialLink: document.getElementById('officialLink'),
   recenterBtn: document.getElementById('recenterBtn'),
   followToggle: document.getElementById('followToggle'),
@@ -38,6 +42,10 @@ dom.entityId.textContent = DEFAULT_PLAYER.entityId;
 dom.requestedRegions.textContent = requestedRegionIds.length ? requestedRegionIds.join(', ') : 'none';
 dom.requestedResources.textContent = requestedResourceIds.length ? requestedResourceIds.join(', ') : 'none';
 dom.officialLink.href = makeOfficialLink(requestedRegionIds, requestedResourceIds);
+
+dom.status.textContent = 'Booting';
+dom.coordSource.textContent = 'none';
+dom.diagnosticsStatus.textContent = 'Loading terrain + runtime cache + live feed…';
 
 const crs = L.extend({}, L.CRS.Simple, {
   projection: {
@@ -69,11 +77,11 @@ const map = L.map('map', {
 });
 
 const bounds = [[0, 0], [MAP_SIZE, MAP_SIZE]];
-const baseLayer = L.imageOverlay('https://bitcraftmap.com/assets/maps/map.webp', bounds, {
+const terrainLayer = L.imageOverlay(TERRAIN_URL, bounds, {
   crossOrigin: true,
   opacity: 1,
 });
-baseLayer.addTo(map);
+terrainLayer.addTo(map);
 
 const regionLayer = L.layerGroup().addTo(map);
 const resourceLayer = L.layerGroup().addTo(map);
@@ -85,54 +93,183 @@ const aelMarker = L.marker([0, 0], {
 });
 let manualMarker = null;
 let aelKnown = false;
+let runtimeCache = null;
+let terrainReady = false;
 
-function initialView() {
+boot().catch((error) => {
+  console.error(error);
+  dom.status.textContent = 'Boot error';
+  dom.diagnosticsStatus.textContent = `Boot error: ${error.message || String(error)}`;
+  dom.diagnosticsStatus.className = 'notice warn';
+});
+
+async function boot() {
+  setupButtons();
+  applyInitialView();
+  drawRequestedRegions();
+  await Promise.all([
+    verifyTerrainImage(),
+    loadRuntimeCache(),
+    loadRequestedResourceSnapshots(),
+  ]);
+  connectAelFeed();
+}
+
+function setupButtons() {
+  dom.recenterBtn.addEventListener('click', () => {
+    if (!aelKnown) return;
+    const ll = aelMarker.getLatLng();
+    map.setView(ll, Math.max(map.getZoom(), 0.8));
+  });
+
+  dom.manualPinBtn.addEventListener('click', () => {
+    const x = Number(dom.manualX.value);
+    const z = Number(dom.manualZ.value);
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+    if (manualMarker) markerLayer.removeLayer(manualMarker);
+    manualMarker = L.marker([z, x], {
+      icon: L.divIcon({ className: 'manual-marker', iconSize: [16, 16], iconAnchor: [8, 8] }),
+    }).bindPopup(`Manual pin<br>X ${x.toFixed(3)}<br>Z ${z.toFixed(3)}<br>Region ${regionIdFromCoord(x, z) ?? 'unknown'}`);
+    markerLayer.addLayer(manualMarker);
+    map.setView([z, x], Math.max(map.getZoom(), 0.8));
+  });
+
+  dom.clearManualPinBtn.addEventListener('click', () => {
+    if (!manualMarker) return;
+    markerLayer.removeLayer(manualMarker);
+    manualMarker = null;
+  });
+}
+
+function applyInitialView() {
   if (requestedCenter && Number.isFinite(requestedZoom)) {
     map.setView([requestedCenter.z, requestedCenter.x], requestedZoom);
     return;
   }
-  if (requestedRegionIds.length) {
-    const first = getRegionBounds(requestedRegionIds[0]);
-    map.fitBounds([[first.zMin, first.xMin], [first.zMax, first.xMax]], { padding: [32, 32] });
-    return;
-  }
-  map.fitBounds(bounds);
+
+  const initialRegion = requestedRegionIds[0] || DEFAULT_PLAYER.defaultRegionId;
+  const first = getRegionBounds(initialRegion);
+  map.fitBounds([[first.zMin, first.xMin], [first.zMax, first.xMax]], { padding: [32, 32] });
 }
 
-initialView();
+async function verifyTerrainImage() {
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  const loaded = await new Promise((resolve) => {
+    img.onload = () => resolve(true);
+    img.onerror = () => resolve(false);
+    img.src = TERRAIN_URL;
+  });
 
-dom.recenterBtn.addEventListener('click', () => {
-  if (!aelKnown) return;
-  const ll = aelMarker.getLatLng();
-  map.setView(ll, Math.max(map.getZoom(), 0.5));
-});
+  if (loaded) {
+    terrainReady = true;
+    refreshDiagnostics();
+    return;
+  }
 
-dom.manualPinBtn.addEventListener('click', () => {
-  const x = Number(dom.manualX.value);
-  const z = Number(dom.manualZ.value);
-  if (!Number.isFinite(x) || !Number.isFinite(z)) return;
-  if (manualMarker) markerLayer.removeLayer(manualMarker);
-  manualMarker = L.marker([z, x], {
-    icon: L.divIcon({ className: 'manual-marker', iconSize: [16, 16], iconAnchor: [8, 8] }),
-  }).bindPopup(`Manual pin<br>X ${x.toFixed(3)}<br>Z ${z.toFixed(3)}<br>Region ${regionIdFromCoord(x, z) ?? 'unknown'}`);
-  markerLayer.addLayer(manualMarker);
-  map.setView([z, x], Math.max(map.getZoom(), 0.5));
-});
+  dom.diagnosticsStatus.textContent = 'Terrain image failed to load.';
+  dom.diagnosticsStatus.className = 'notice warn';
+}
 
-dom.clearManualPinBtn.addEventListener('click', () => {
-  if (!manualMarker) return;
-  markerLayer.removeLayer(manualMarker);
-  manualMarker = null;
-});
+async function loadRuntimeCache() {
+  try {
+    const res = await fetch(`${RUNTIME_AEL_CACHE_URL}?v=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) {
+      refreshDiagnostics();
+      return;
+    }
+    runtimeCache = await res.json();
+    if (Number.isFinite(runtimeCache?.x) && Number.isFinite(runtimeCache?.z)) {
+      setAelPosition({
+        x: runtimeCache.x,
+        z: runtimeCache.z,
+        regionId: runtimeCache.regionId,
+        timestamp: runtimeCache.timestamp,
+        source: 'cached',
+        recenter: true,
+      });
+      dom.status.textContent = 'Cached fix acquired';
+    }
+  } catch (error) {
+    console.warn('Runtime cache load failed', error);
+  } finally {
+    refreshDiagnostics();
+  }
+}
+
+function connectAelFeed() {
+  dom.status.textContent = runtimeCache ? 'Waiting for live feed' : 'Connecting to live feed';
+
+  const ws = new WebSocket(LIVE_WS);
+
+  ws.addEventListener('open', () => {
+    dom.status.textContent = runtimeCache ? 'Subscribed · waiting live' : 'Subscribed';
+    ws.send(JSON.stringify({ type: 'subscribe', channels: [`mobile_entity_state:${DEFAULT_PLAYER.entityId}`] }));
+    refreshDiagnostics();
+  });
+
+  ws.addEventListener('message', (event) => {
+    const msg = JSON.parse(event.data);
+    if (msg.type !== 'event' || !msg.data) return;
+    const data = msg.data;
+    const x = typeof data.location_x === 'number' ? data.location_x / 1000 : null;
+    const z = typeof data.location_z === 'number' ? data.location_z / 1000 : null;
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+
+    setAelPosition({
+      x,
+      z,
+      regionId: data.region_id ? Number(data.region_id) : regionIdFromCoord(x, z),
+      timestamp: data.timestamp,
+      source: 'live',
+      recenter: dom.followToggle.checked,
+    });
+
+    dom.status.textContent = data.is_walking ? 'Live · walking' : 'Live';
+    refreshDiagnostics();
+  });
+
+  ws.addEventListener('close', () => {
+    if (!aelKnown) {
+      dom.status.textContent = runtimeCache ? 'Live feed closed · showing cached position' : 'Live feed closed';
+    }
+    refreshDiagnostics();
+  });
+
+  ws.addEventListener('error', () => {
+    if (!aelKnown) {
+      dom.status.textContent = runtimeCache ? 'Live feed error · showing cached position' : 'Live feed error';
+    }
+    refreshDiagnostics();
+  });
+}
+
+function setAelPosition({ x, z, regionId, timestamp, source, recenter }) {
+  const latLng = [z, x];
+  aelMarker.setLatLng(latLng);
+  if (!markerLayer.hasLayer(aelMarker)) markerLayer.addLayer(aelMarker);
+  aelMarker.bindPopup(`Ael<br>X ${x.toFixed(3)}<br>Z ${z.toFixed(3)}<br>Region ${regionId ?? 'unknown'}<br>Source ${source}`);
+
+  dom.coordSource.textContent = source;
+  dom.coordX.textContent = x.toFixed(3);
+  dom.coordZ.textContent = z.toFixed(3);
+  dom.coordRegion.textContent = String(regionId ?? regionIdFromCoord(x, z) ?? 'unknown');
+  dom.coordTimestamp.textContent = timestamp ? String(timestamp) : 'unknown';
+  aelKnown = true;
+
+  if (recenter) {
+    map.setView(latLng, Math.max(map.getZoom(), 1.2), { animate: false });
+  }
+}
 
 function drawRequestedRegions() {
-  const regions = requestedRegionIds.length ? requestedRegionIds : [12];
+  const regions = requestedRegionIds.length ? requestedRegionIds : [DEFAULT_PLAYER.defaultRegionId];
   for (const regionId of regions) {
     const r = getRegionBounds(regionId);
     const rect = L.rectangle([[r.zMin, r.xMin], [r.zMax, r.xMax]], {
-      color: regionId === 12 ? '#63d2ff' : '#7cff9e',
+      color: regionId === DEFAULT_PLAYER.defaultRegionId ? '#63d2ff' : '#7cff9e',
       weight: 2,
-      fillColor: regionId === 12 ? '#63d2ff' : '#7cff9e',
+      fillColor: regionId === DEFAULT_PLAYER.defaultRegionId ? '#63d2ff' : '#7cff9e',
       fillOpacity: 0.06,
     });
     rect.bindTooltip(`Region ${regionId}`, { permanent: true, direction: 'center', className: 'region-label' });
@@ -140,12 +277,9 @@ function drawRequestedRegions() {
   }
 }
 
-drawRequestedRegions();
-loadRequestedResourceSnapshots();
-connectAelFeed();
-
 async function loadRequestedResourceSnapshots() {
   if (!requestedRegionIds.length || !requestedResourceIds.length) {
+    dom.resourceStatus.textContent = 'No resource snapshot requested.';
     return;
   }
 
@@ -193,64 +327,14 @@ async function loadRequestedResourceSnapshots() {
   }
 }
 
-function connectAelFeed() {
-  dom.status.textContent = 'Connecting to live.bitjita.com…';
-
-  const ws = new WebSocket(LIVE_WS);
-  ws.addEventListener('open', () => {
-    dom.status.textContent = 'Subscribed';
-    ws.send(JSON.stringify({ type: 'subscribe', channels: [`mobile_entity_state:${DEFAULT_PLAYER.entityId}`] }));
-  });
-
-  ws.addEventListener('message', (event) => {
-    const msg = JSON.parse(event.data);
-    if (msg.type === 'subscribed') {
-      return;
-    }
-    if (msg.type !== 'event' || !msg.data) {
-      return;
-    }
-
-    const data = msg.data;
-    const x = typeof data.location_x === 'number' ? data.location_x / 1000 : null;
-    const z = typeof data.location_z === 'number' ? data.location_z / 1000 : null;
-    if (!Number.isFinite(x) || !Number.isFinite(z)) {
-      return;
-    }
-
-    const region = data.region_id ? Number(data.region_id) : regionIdFromCoord(x, z);
-    const latLng = [z, x];
-    aelMarker.setLatLng(latLng);
-    if (!markerLayer.hasLayer(aelMarker)) {
-      markerLayer.addLayer(aelMarker);
-    }
-    aelMarker.bindPopup(`Ael<br>X ${x.toFixed(3)}<br>Z ${z.toFixed(3)}<br>Region ${region ?? 'unknown'}`);
-
-    dom.coordX.textContent = x.toFixed(3);
-    dom.coordZ.textContent = z.toFixed(3);
-    dom.coordRegion.textContent = String(region ?? 'unknown');
-    dom.coordTimestamp.textContent = data.timestamp ? String(data.timestamp) : 'live';
-    dom.status.textContent = data.is_walking ? 'Live · walking' : 'Live';
-    aelKnown = true;
-
-    if (dom.followToggle.checked) {
-      map.setView(latLng, Math.max(map.getZoom(), 0.6), { animate: false });
-    }
-  });
-
-  ws.addEventListener('close', () => {
-    if (dom.status.textContent.startsWith('Live')) {
-      dom.status.textContent = 'Feed closed';
-    } else {
-      dom.status.textContent = 'Feed closed before first live update';
-    }
-  });
-
-  ws.addEventListener('error', () => {
-    if (!aelKnown) {
-      dom.status.textContent = 'Live feed error';
-    }
-  });
+function refreshDiagnostics() {
+  const parts = [];
+  parts.push(terrainReady ? 'terrain ok' : 'terrain pending');
+  parts.push(runtimeCache ? 'cache ok' : 'no cache');
+  parts.push(aelKnown ? 'marker ready' : 'no marker yet');
+  parts.push(`view z=${map.getZoom().toFixed(1)}`);
+  dom.diagnosticsStatus.textContent = `Diagnostics: ${parts.join(' · ')}`;
+  dom.diagnosticsStatus.className = aelKnown || terrainReady ? 'notice' : 'notice warn';
 }
 
 function parseIdList(raw) {

@@ -238,6 +238,34 @@ That writes to:
 data/resources/12/1180909566.json
 ```
 
+## Drift diagnosis and fixes
+
+Where I drifted before:
+- I validated **assets and headers**, but not the **rendered hosted page state**.
+- I assumed the terrain problem was only a bad layer URL, but the bigger hosted failure was:
+  - opening too zoomed out
+  - no immediate fallback marker unless a live websocket event arrived
+- I had no enforceable rule saying **"do not claim hosted success until a browser simulation sees terrain + marker + coordinates"**.
+
+What I built to stop that drift:
+- default view now opens on **region 12**, not the full-world tiny overview
+- hosted app now loads a **runtime Ael cache** so it shows a marker even before the next live websocket event
+- runtime diagnostics panel now shows:
+  - terrain status
+  - cache status
+  - marker readiness
+  - current zoom
+- scheduled GitHub Pages deploy refreshes the runtime Ael cache every **15 minutes**
+- smoke-test workflow runs browser simulations on push and hourly against:
+  - local build
+  - hosted Pages site
+- smoke test asserts:
+  - terrain image loaded
+  - marker rendered
+  - coordinates present
+  - region label present
+  - no bad boot/feed status
+
 ## Findings quality bar
 
 This repo is based on:
@@ -246,3 +274,4 @@ This repo is based on:
 - live websocket subscription tests against the native Bitcraft live feed
 - direct resource GeoJSON retrieval for the example resource in region 12
 - cross-checking region math against observed coordinates
+- browser render simulations against both local and hosted versions

@@ -1,0 +1,5 @@
+node_modules/
+smoke-test.png
+tmp-*.png
+tmp-*.json
+.DS_Store
