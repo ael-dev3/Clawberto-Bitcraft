@@ -216,6 +216,15 @@ input[type="number"] {
   white-space: nowrap;
 }
 
+.friend-marker-hitbox {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
 .friend-marker-dot {
   width: 12px;
   height: 12px;
@@ -223,6 +232,7 @@ input[type="number"] {
   background: #7cff9e;
   border: 2px solid #eafff0;
   box-shadow: 0 0 0 4px rgba(124,255,158,0.14);
+  pointer-events: none;
 }
 
 .friend-marker-label {
@@ -237,6 +247,7 @@ input[type="number"] {
   white-space: nowrap;
   box-shadow: 0 2px 8px rgba(0,0,0,0.28);
   cursor: pointer;
+  pointer-events: none;
 }
 
 .map-wrap {
