@@ -13,15 +13,26 @@ const previousById = new Map(previous.map((row) => [String(row.entityId), row]))
 
 const merged = [];
 for (const player of players) {
-  const resp = await fetch(`https://bitcraftmap.com/api/players/${player.entityId}`);
-  const data = await resp.json();
-  const detail = data.player || {};
   const prev = previousById.get(String(player.entityId)) || {};
+  let detail = {};
+  try {
+    const resp = await fetch(`https://bitcraftmap.com/api/players/${player.entityId}`);
+    const text = await resp.text();
+    if (resp.ok && text.trim().startsWith('{')) {
+      const parsed = JSON.parse(text);
+      detail = parsed.player || {};
+    } else {
+      console.warn(`player detail fallback for ${player.username}: non-json or non-ok response`);
+    }
+  } catch (error) {
+    console.warn(`player detail fallback for ${player.username}: ${error.message}`);
+  }
+
   merged.push({
     username: player.username,
     entityId: String(player.entityId),
-    x: typeof detail.teleportLocationX === 'number' ? detail.teleportLocationX : prev.x ?? null,
-    z: typeof detail.teleportLocationZ === 'number' ? detail.teleportLocationZ : prev.z ?? null,
+    x: typeof detail.teleportLocationX === 'number' ? detail.teleportLocationX : (prev.x ?? null),
+    z: typeof detail.teleportLocationZ === 'number' ? detail.teleportLocationZ : (prev.z ?? null),
     regionId:
       typeof detail.teleportLocationX === 'number' && typeof detail.teleportLocationZ === 'number'
         ? 12
