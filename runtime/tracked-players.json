@@ -12,13 +12,12 @@
   {
     "username": "Jerialt",
     "entityId": "1008806316547466573",
-    "x": 11381.253,
-    "z": 16105.005,
+    "x": 8926,
+    "z": 16053,
     "regionId": 12,
-    "source": "live.bitjita.com",
+    "source": "player-detail-teleport",
     "signedIn": true,
-    "lastLoginTimestamp": "2026-03-08 10:38:18+00",
-    "timestamp": 1773002009
+    "lastLoginTimestamp": "2026-03-08 10:38:18+00"
   },
   {
     "username": "balistafreak",
@@ -27,7 +26,7 @@
     "z": 16110,
     "regionId": 12,
     "source": "player-detail-teleport",
-    "signedIn": true,
+    "signedIn": false,
     "lastLoginTimestamp": "2026-03-08 02:47:22+00"
   },
   {
@@ -53,12 +52,13 @@
   {
     "username": "Primadonna",
     "entityId": "1008806316547465493",
-    "x": 11403,
-    "z": 16110,
+    "x": 12387.732,
+    "z": 16793.246,
     "regionId": 12,
-    "source": "player-detail-teleport",
+    "source": "live.bitjita.com",
     "signedIn": true,
-    "lastLoginTimestamp": "2026-03-08 18:42:10+00"
+    "lastLoginTimestamp": "2026-03-08 18:42:10+00",
+    "timestamp": 1773002947
   },
   {
     "username": "Tris",
@@ -119,5 +119,16 @@
     "source": "player-detail-teleport",
     "signedIn": false,
     "lastLoginTimestamp": "2026-03-08 08:04:30+00"
+  },
+  {
+    "username": "Jelly",
+    "entityId": "1369094286737938880",
+    "x": 11404.316,
+    "z": 16069.425,
+    "regionId": 12,
+    "source": "live.bitjita.com",
+    "signedIn": true,
+    "lastLoginTimestamp": "2026-03-08 20:33:59+00",
+    "timestamp": 1773002945
   }
 ]
