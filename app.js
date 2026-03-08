@@ -381,19 +381,21 @@ function renderMapPlayers() {
       playerDotLayer.addLayer(dotMarker);
     }
     dotMarker.setLatLng([player.z, player.x]);
-    dotMarker.bindPopup(`${player.username}<br>X ${player.x.toFixed(3)}<br>Z ${player.z.toFixed(3)}<br>Region ${player.regionId ?? 'unknown'}<br>Source ${player.source || 'unknown'}`);
+    const popupHtml = `${player.username}<br>X ${player.x.toFixed(3)}<br>Z ${player.z.toFixed(3)}<br>Region ${player.regionId ?? 'unknown'}<br>Source ${player.source || 'unknown'}`;
+    dotMarker.bindPopup(popupHtml);
 
-    const labelState = labelPositions.get(entityId) || { x: player.x, z: player.z - 140 };
+    const labelState = labelPositions.get(entityId) || { x: player.x, z: player.z - 120 };
     let labelMarker = playerLabelMarkers.get(entityId);
     const labelHtml = `<div class="friend-marker-label">${escapeHtml(player.username)}</div>`;
     if (!labelMarker) {
       labelMarker = L.marker([labelState.z, labelState.x], {
-        interactive: false,
-        keyboard: false,
+        interactive: true,
+        keyboard: true,
+        zIndexOffset: 1000,
         icon: L.divIcon({
           className: '',
-          iconSize: [10, 10],
-          iconAnchor: [5, 5],
+          iconSize: [120, 24],
+          iconAnchor: [60, 12],
           html: labelHtml,
         }),
       });
@@ -403,10 +405,11 @@ function renderMapPlayers() {
     labelMarker.setLatLng([labelState.z, labelState.x]);
     labelMarker.setIcon(L.divIcon({
       className: '',
-      iconSize: [10, 10],
-      iconAnchor: [5, 5],
+      iconSize: [120, 24],
+      iconAnchor: [60, 12],
       html: labelHtml,
     }));
+    labelMarker.bindPopup(popupHtml);
   }
 
   for (const [entityId, marker] of playerDotMarkers.entries()) {
@@ -448,16 +451,22 @@ function buildLabelPositions(players) {
     group.sort((a, b) => a.username.localeCompare(b.username));
     if (group.length === 1) {
       const p = group[0];
-      out.set(String(p.entityId), { x: p.x, z: p.z - 140 });
+      out.set(String(p.entityId), { x: p.x, z: p.z - 120 });
       continue;
     }
-    const radius = Math.max(220, 38 * group.length);
+
+    const useTwoColumns = group.length >= 8;
+    const xOffsets = useTwoColumns ? [-78, 78] : [0];
+    const baseLift = 120;
+    const rowGap = 52;
+
     for (let i = 0; i < group.length; i++) {
       const p = group[i];
-      const angle = -Math.PI / 2 + (Math.PI * 2 * i) / group.length;
+      const column = useTwoColumns ? i % 2 : 0;
+      const row = useTwoColumns ? Math.floor(i / 2) : i;
       out.set(String(p.entityId), {
-        x: p.x + Math.cos(angle) * radius,
-        z: p.z + Math.sin(angle) * radius,
+        x: p.x + xOffsets[column],
+        z: p.z - baseLift - row * rowGap,
       });
     }
   }
