@@ -27,8 +27,10 @@ jobs:
           npm install
           npx playwright install --with-deps chromium
 
-      - name: Refresh runtime cache
-        run: node scripts/update-ael-live-cache.mjs
+      - name: Refresh runtime caches
+        run: |
+          node scripts/update-ael-live-cache.mjs
+          node scripts/update-tracked-players-cache.mjs
 
       - name: Start local server
         run: |

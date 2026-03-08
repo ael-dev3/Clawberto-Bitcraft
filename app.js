@@ -5,6 +5,8 @@ const APOTHEM = 2 / Math.sqrt(3);
 const LIVE_WS = 'wss://live.bitjita.com';
 const TERRAIN_URL = './assets/terrain/region12.png';
 const RUNTIME_AEL_CACHE_URL = './runtime/ael-live.json';
+const TRACKED_PLAYERS_CACHE_URL = './runtime/tracked-players.json';
+const TRACKED_PLAYERS_CONFIG_URL = './data/tracked-players.json';
 const FIXED_REGION_ID = 12;
 const DEFAULT_PLAYER = {
   username: 'Ael',
@@ -36,6 +38,7 @@ const dom = {
   manualZ: document.getElementById('manualZ'),
   manualPinBtn: document.getElementById('manualPinBtn'),
   clearManualPinBtn: document.getElementById('clearManualPinBtn'),
+  trackedPlayersList: document.getElementById('trackedPlayersList'),
 };
 
 const fixedRegion = getRegionBounds(FIXED_REGION_ID);
@@ -81,6 +84,7 @@ terrainLayer.addTo(map);
 const regionLayer = L.layerGroup().addTo(map);
 const resourceLayer = L.layerGroup().addTo(map);
 const markerLayer = L.layerGroup().addTo(map);
+const trackedMarkerLayer = L.layerGroup().addTo(map);
 const resourceRenderer = L.canvas({ padding: 0.5 });
 
 const aelMarker = L.marker([0, 0], {
@@ -89,7 +93,11 @@ const aelMarker = L.marker([0, 0], {
 let manualMarker = null;
 let aelKnown = false;
 let runtimeCache = null;
+let trackedRuntimeCache = [];
+let trackedPlayerConfig = [];
 let terrainReady = false;
+const trackedPlayers = new Map();
+const trackedMarkers = new Map();
 
 dom.entityId.textContent = DEFAULT_PLAYER.entityId;
 dom.requestedRegions.textContent = '12 (fixed build)';
@@ -113,9 +121,10 @@ async function boot() {
   await Promise.all([
     verifyTerrainImage(),
     loadRuntimeCache(),
+    loadTrackedPlayersCache(),
     loadRequestedResourceSnapshots(),
   ]);
-  connectAelFeed();
+  connectLiveFeeds();
 }
 
 function setupButtons() {
@@ -192,7 +201,7 @@ async function loadRuntimeCache() {
         regionId: runtimeCache.regionId,
         timestamp: runtimeCache.timestamp,
         source: 'cached',
-        recenter: true,
+        recenter: false,
       });
       dom.status.textContent = 'Cached fix acquired';
     }
@@ -203,34 +212,71 @@ async function loadRuntimeCache() {
   }
 }
 
-function connectAelFeed() {
+async function loadTrackedPlayersCache() {
+  try {
+    const [configRes, cacheRes] = await Promise.all([
+      fetch(`${TRACKED_PLAYERS_CONFIG_URL}?v=${Date.now()}`, { cache: 'no-store' }),
+      fetch(`${TRACKED_PLAYERS_CACHE_URL}?v=${Date.now()}`, { cache: 'no-store' }),
+    ]);
+    trackedPlayerConfig = configRes.ok ? await configRes.json() : [];
+    trackedRuntimeCache = cacheRes.ok ? await cacheRes.json() : [];
+
+    const cacheById = new Map(trackedRuntimeCache.map((row) => [String(row.entityId), row]));
+    for (const player of trackedPlayerConfig) {
+      const merged = { ...player, ...(cacheById.get(String(player.entityId)) || {}) };
+      trackedPlayers.set(String(player.entityId), merged);
+    }
+    renderTrackedPlayers();
+    fitToKnownPlayers();
+  } catch (error) {
+    console.warn('Tracked players cache load failed', error);
+  } finally {
+    refreshDiagnostics();
+  }
+}
+
+function connectLiveFeeds() {
   dom.status.textContent = runtimeCache ? 'Waiting for live feed' : 'Connecting to live feed';
   const ws = new WebSocket(LIVE_WS);
 
   ws.addEventListener('open', () => {
+    const channels = [`mobile_entity_state:${DEFAULT_PLAYER.entityId}`];
+    for (const player of trackedPlayers.values()) {
+      channels.push(`mobile_entity_state:${player.entityId}`);
+    }
     dom.status.textContent = runtimeCache ? 'Subscribed · waiting live' : 'Subscribed';
-    ws.send(JSON.stringify({ type: 'subscribe', channels: [`mobile_entity_state:${DEFAULT_PLAYER.entityId}`] }));
+    ws.send(JSON.stringify({ type: 'subscribe', channels }));
     refreshDiagnostics();
   });
 
   ws.addEventListener('message', (event) => {
     const msg = JSON.parse(event.data);
     if (msg.type !== 'event' || !msg.data) return;
-    const data = msg.data;
-    const x = typeof data.location_x === 'number' ? data.location_x / 1000 : null;
-    const z = typeof data.location_z === 'number' ? data.location_z / 1000 : null;
+    const entityId = String(msg.data.entity_id || extractEntityId(msg.channel));
+    const x = typeof msg.data.location_x === 'number' ? msg.data.location_x / 1000 : null;
+    const z = typeof msg.data.location_z === 'number' ? msg.data.location_z / 1000 : null;
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
 
-    setAelPosition({
-      x,
-      z,
-      regionId: data.region_id ? Number(data.region_id) : regionIdFromCoord(x, z),
-      timestamp: data.timestamp,
-      source: 'live',
-      recenter: dom.followToggle.checked,
-    });
-
-    dom.status.textContent = data.is_walking ? 'Live · walking' : 'Live';
+    if (entityId === DEFAULT_PLAYER.entityId) {
+      setAelPosition({
+        x,
+        z,
+        regionId: msg.data.region_id ? Number(msg.data.region_id) : regionIdFromCoord(x, z),
+        timestamp: msg.data.timestamp,
+        source: 'live',
+        recenter: dom.followToggle.checked,
+      });
+      dom.status.textContent = msg.data.is_walking ? 'Live · walking' : 'Live';
+    } else if (trackedPlayers.has(entityId)) {
+      updateTrackedPlayer(entityId, {
+        x,
+        z,
+        regionId: msg.data.region_id ? Number(msg.data.region_id) : regionIdFromCoord(x, z),
+        timestamp: msg.data.timestamp,
+        source: 'live',
+        signedIn: true,
+      });
+    }
     refreshDiagnostics();
   });
 
@@ -271,6 +317,106 @@ function setAelPosition({ x, z, regionId, timestamp, source, recenter }) {
   if (recenter && isInsideFixedRegion(x, z)) {
     map.setView(latLng, Math.max(map.getZoom(), 1.2), { animate: false });
   }
+}
+
+function updateTrackedPlayer(entityId, patch) {
+  const prev = trackedPlayers.get(String(entityId)) || { entityId: String(entityId), username: String(entityId) };
+  trackedPlayers.set(String(entityId), { ...prev, ...patch });
+  renderTrackedPlayers();
+}
+
+function renderTrackedPlayers() {
+  renderTrackedPlayersList();
+  renderTrackedMarkers();
+}
+
+function renderTrackedPlayersList() {
+  const rows = Array.from(trackedPlayers.values()).sort((a, b) => a.username.localeCompare(b.username));
+  dom.trackedPlayersList.innerHTML = '';
+  for (const player of rows) {
+    const onMap = Number.isFinite(player.x) && Number.isFinite(player.z) && isInsideFixedRegion(player.x, player.z) && Number(player.regionId ?? regionIdFromCoord(player.x, player.z)) === FIXED_REGION_ID;
+    const card = document.createElement('div');
+    card.className = 'tracked-player';
+    card.innerHTML = `
+      <div class="tracked-player-head">
+        <span>${escapeHtml(player.username)}</span>
+        <span>${onMap ? 'on map' : 'off map'}</span>
+      </div>
+      <div class="tracked-player-meta">
+        X ${formatMaybe(player.x)} · Z ${formatMaybe(player.z)}<br>
+        region ${player.regionId ?? regionIdFromCoord(player.x, player.z) ?? '—'} · source ${player.source || 'unknown'}<br>
+        signed in ${player.signedIn === true ? 'yes' : player.signedIn === false ? 'no' : 'unknown'}
+      </div>
+    `;
+    dom.trackedPlayersList.appendChild(card);
+  }
+}
+
+function renderTrackedMarkers() {
+  const rows = Array.from(trackedPlayers.values()).filter((player) => Number.isFinite(player.x) && Number.isFinite(player.z) && isInsideFixedRegion(player.x, player.z) && Number(player.regionId ?? regionIdFromCoord(player.x, player.z)) === FIXED_REGION_ID);
+  const grouped = buildJitteredPositions(rows);
+  const seen = new Set();
+
+  for (const player of rows) {
+    const markerState = grouped.get(String(player.entityId));
+    if (!markerState) continue;
+    seen.add(String(player.entityId));
+    let marker = trackedMarkers.get(String(player.entityId));
+    if (!marker) {
+      marker = L.marker([markerState.z, markerState.x], {
+        icon: L.divIcon({
+          className: '',
+          iconSize: [12, 12],
+          iconAnchor: [6, 6],
+          html: `<div class="friend-marker"><div class="friend-marker-dot"></div><div class="friend-marker-label">${escapeHtml(player.username)}</div></div>`,
+        }),
+      });
+      trackedMarkers.set(String(player.entityId), marker);
+      trackedMarkerLayer.addLayer(marker);
+    }
+    marker.setLatLng([markerState.z, markerState.x]);
+    marker.setIcon(L.divIcon({
+      className: '',
+      iconSize: [12, 12],
+      iconAnchor: [6, 6],
+      html: `<div class="friend-marker"><div class="friend-marker-dot"></div><div class="friend-marker-label">${escapeHtml(player.username)}</div></div>`,
+    }));
+    marker.bindPopup(`${player.username}<br>X ${player.x.toFixed(3)}<br>Z ${player.z.toFixed(3)}<br>Region ${player.regionId ?? 'unknown'}<br>Source ${player.source || 'unknown'}`);
+  }
+
+  for (const [entityId, marker] of trackedMarkers.entries()) {
+    if (!seen.has(entityId)) {
+      trackedMarkerLayer.removeLayer(marker);
+      trackedMarkers.delete(entityId);
+    }
+  }
+}
+
+function buildJitteredPositions(players) {
+  const groups = new Map();
+  for (const player of players) {
+    const key = `${player.x.toFixed(3)}:${player.z.toFixed(3)}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(player);
+  }
+  const out = new Map();
+  for (const group of groups.values()) {
+    group.sort((a, b) => a.username.localeCompare(b.username));
+    const radius = 180; // world units, intentionally wide so labels are actually readable
+    for (let i = 0; i < group.length; i++) {
+      const p = group[i];
+      if (group.length === 1) {
+        out.set(String(p.entityId), { x: p.x, z: p.z });
+        continue;
+      }
+      const angle = (Math.PI * 2 * i) / group.length;
+      out.set(String(p.entityId), {
+        x: p.x + Math.cos(angle) * radius,
+        z: p.z + Math.sin(angle) * radius,
+      });
+    }
+  }
+  return out;
 }
 
 function drawRegionFrame() {
@@ -333,11 +479,29 @@ async function loadRequestedResourceSnapshots() {
   }
 }
 
+function fitToKnownPlayers() {
+  const pts = [];
+  if (runtimeCache && Number.isFinite(runtimeCache.x) && Number.isFinite(runtimeCache.z) && isInsideFixedRegion(runtimeCache.x, runtimeCache.z)) {
+    pts.push([runtimeCache.z, runtimeCache.x]);
+  }
+  for (const player of trackedPlayers.values()) {
+    if (Number.isFinite(player.x) && Number.isFinite(player.z) && isInsideFixedRegion(player.x, player.z)) {
+      pts.push([player.z, player.x]);
+    }
+  }
+  if (pts.length >= 2) {
+    map.fitBounds(L.latLngBounds(pts), { padding: [80, 80], maxZoom: 1.2 });
+  } else if (pts.length === 1) {
+    map.setView(pts[0], 1.2);
+  }
+}
+
 function refreshDiagnostics() {
   const parts = [];
   parts.push(terrainReady ? 'region12 terrain ok' : 'terrain pending');
-  parts.push(runtimeCache ? 'cache ok' : 'no cache');
-  parts.push(aelKnown ? 'marker ready' : 'no marker yet');
+  parts.push(runtimeCache ? 'ael cache ok' : 'no ael cache');
+  parts.push(trackedPlayers.size ? `${trackedPlayers.size} tracked players` : 'no tracked players');
+  parts.push(aelKnown ? 'ael marker ready' : 'no ael marker yet');
   parts.push(`view z=${map.getZoom().toFixed(1)}`);
   dom.diagnosticsStatus.textContent = `Diagnostics: ${parts.join(' · ')}`;
   dom.diagnosticsStatus.className = aelKnown || terrainReady ? 'notice' : 'notice warn';
@@ -386,4 +550,23 @@ function makeOfficialLink(resourceIds) {
   url.searchParams.set('regionId', String(FIXED_REGION_ID));
   if (resourceIds.length) url.searchParams.set('resourceId', resourceIds.join(','));
   return url.toString();
+}
+
+function extractEntityId(channel) {
+  if (!channel) return null;
+  const parts = String(channel).split(':');
+  return parts[parts.length - 1] || null;
+}
+
+function formatMaybe(value) {
+  return Number.isFinite(value) ? Number(value).toFixed(3) : '—';
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }

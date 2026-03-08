@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "update:ael-cache": "node scripts/update-ael-live-cache.mjs",
+    "update:tracked-cache": "node scripts/update-tracked-players-cache.mjs",
     "smoke:local": "node scripts/smoke-test-overlay.mjs http://127.0.0.1:8131/",
     "smoke:hosted": "node scripts/smoke-test-overlay.mjs https://ael-dev3.github.io/Clawberto-Bitcraft/"
   },

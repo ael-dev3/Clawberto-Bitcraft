@@ -1,0 +1,123 @@
+[
+  {
+    "username": "Jericcho",
+    "entityId": "1008806316547466018",
+    "x": 11403,
+    "z": 16110,
+    "regionId": 12,
+    "source": "player-detail-teleport",
+    "signedIn": true,
+    "lastLoginTimestamp": "2026-03-08 10:38:17+00"
+  },
+  {
+    "username": "Jerialt",
+    "entityId": "1008806316547466573",
+    "x": 11381.253,
+    "z": 16105.005,
+    "regionId": 12,
+    "source": "live.bitjita.com",
+    "signedIn": true,
+    "lastLoginTimestamp": "2026-03-08 10:38:18+00",
+    "timestamp": 1773002009
+  },
+  {
+    "username": "balistafreak",
+    "entityId": "1224979098660028451",
+    "x": 11403,
+    "z": 16110,
+    "regionId": 12,
+    "source": "player-detail-teleport",
+    "signedIn": true,
+    "lastLoginTimestamp": "2026-03-08 02:47:22+00"
+  },
+  {
+    "username": "Egulist",
+    "entityId": "576460752317376004",
+    "x": 11403,
+    "z": 16110,
+    "regionId": 12,
+    "source": "player-detail-teleport",
+    "signedIn": false,
+    "lastLoginTimestamp": "2026-03-08 15:08:25+00"
+  },
+  {
+    "username": "Kofa",
+    "entityId": "864691128472668810",
+    "x": 11403,
+    "z": 16110,
+    "regionId": 12,
+    "source": "player-detail-teleport",
+    "signedIn": false,
+    "lastLoginTimestamp": "2026-03-08 11:35:57+00"
+  },
+  {
+    "username": "Primadonna",
+    "entityId": "1008806316547465493",
+    "x": 11403,
+    "z": 16110,
+    "regionId": 12,
+    "source": "player-detail-teleport",
+    "signedIn": true,
+    "lastLoginTimestamp": "2026-03-08 18:42:10+00"
+  },
+  {
+    "username": "Tris",
+    "entityId": "864691128472670040",
+    "x": 11403,
+    "z": 16110,
+    "regionId": 12,
+    "source": "player-detail-teleport",
+    "signedIn": true,
+    "lastLoginTimestamp": "2026-03-08 18:33:14+00"
+  },
+  {
+    "username": "TOSCompliant",
+    "entityId": "504403158282055941",
+    "x": 11403,
+    "z": 16110,
+    "regionId": 12,
+    "source": "player-detail-teleport",
+    "signedIn": true,
+    "lastLoginTimestamp": "2026-03-08 16:03:18+00"
+  },
+  {
+    "username": "Dwaef",
+    "entityId": "504403158281228671",
+    "x": 11403,
+    "z": 16110,
+    "regionId": 12,
+    "source": "player-detail-teleport",
+    "signedIn": true,
+    "lastLoginTimestamp": "2026-03-08 13:11:33+00"
+  },
+  {
+    "username": "Titris",
+    "entityId": "864691128472667460",
+    "x": 11403,
+    "z": 16110,
+    "regionId": 12,
+    "source": "player-detail-teleport",
+    "signedIn": true,
+    "lastLoginTimestamp": "2026-03-08 20:23:39+00"
+  },
+  {
+    "username": "Isidis",
+    "entityId": "1008806316550036140",
+    "x": 11403,
+    "z": 16110,
+    "regionId": 12,
+    "source": "player-detail-teleport",
+    "signedIn": false,
+    "lastLoginTimestamp": "2026-03-08 17:49:05+00"
+  },
+  {
+    "username": "PinkCrayon",
+    "entityId": "648518346354064902",
+    "x": 11403,
+    "z": 16110,
+    "regionId": 12,
+    "source": "player-detail-teleport",
+    "signedIn": false,
+    "lastLoginTimestamp": "2026-03-08 08:04:30+00"
+  }
+]

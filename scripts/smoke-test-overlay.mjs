@@ -23,6 +23,7 @@ const state = await page.evaluate(() => {
   const diagnostics = document.querySelector('#diagnosticsStatus')?.textContent?.trim() || '';
   const markers = document.querySelectorAll('.leaflet-marker-icon').length;
   const regionLabels = document.body.innerText.includes('Region 12');
+  const bodyText = document.body.innerText;
   return {
     terrainLoaded: Boolean(terrainImg && terrainImg.complete && terrainImg.naturalWidth > 0),
     terrainSrc: terrainImg?.src || null,
@@ -34,6 +35,8 @@ const state = await page.evaluate(() => {
     diagnostics,
     markers,
     regionLabels,
+    hasJericcho: bodyText.includes('Jericcho'),
+    hasPinkCrayon: bodyText.includes('PinkCrayon'),
   };
 });
 
@@ -43,11 +46,12 @@ await browser.close();
 if (!state.terrainLoaded) throw new Error(`Terrain image not loaded: ${JSON.stringify(state)}`);
 if (!/region12\.png$/i.test(state.terrainSrc || '')) throw new Error(`Unexpected terrain asset: ${JSON.stringify(state)}`);
 if (!state.regionLabels) throw new Error(`Region label missing: ${JSON.stringify(state)}`);
-if (state.markers < 1) throw new Error(`No marker rendered: ${JSON.stringify(state)}`);
+if (state.markers < 5) throw new Error(`Too few markers rendered: ${JSON.stringify(state)}`);
 if (!state.mapSize || state.mapSize.width < 500 || state.mapSize.height < 400) throw new Error(`Map container size invalid: ${JSON.stringify(state)}`);
 if (!state.status || /Boot error|Live feed error/i.test(state.status)) throw new Error(`Bad status: ${JSON.stringify(state)}`);
 if (!(state.source === 'live' || state.source === 'cached')) throw new Error(`Unexpected coordinate source: ${JSON.stringify(state)}`);
 if (state.x === '—' || state.z === '—') throw new Error(`Coordinates missing: ${JSON.stringify(state)}`);
+if (!state.hasJericcho || !state.hasPinkCrayon) throw new Error(`Tracked player names missing: ${JSON.stringify(state)}`);
 if (errors.length) throw new Error(`Browser errors: ${errors.join(' | ')}`);
 
 console.log(JSON.stringify({ ok: true, url: targetUrl, state }, null, 2));

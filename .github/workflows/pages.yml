@@ -34,6 +34,9 @@ jobs:
       - name: Refresh Ael runtime cache
         run: node scripts/update-ael-live-cache.mjs
 
+      - name: Refresh tracked players runtime cache
+        run: node scripts/update-tracked-players-cache.mjs
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 

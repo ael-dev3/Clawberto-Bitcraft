@@ -178,6 +178,76 @@ input[type="number"] {
   margin-top: 8px;
 }
 
+.tracked-list {
+  display: grid;
+  gap: 8px;
+}
+
+.tracked-player {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.03);
+}
+
+.tracked-player-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.tracked-player-meta {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.tracked-label {
+  background: rgba(11,18,32,0.88);
+  color: #ecf2ff;
+  border: 1px solid rgba(99,210,255,0.35);
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 800;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+  white-space: nowrap;
+}
+
+.friend-marker {
+  position: relative;
+  width: 12px;
+  height: 12px;
+}
+
+.friend-marker-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: #7cff9e;
+  border: 2px solid #eafff0;
+  box-shadow: 0 0 0 5px rgba(124,255,158,0.14);
+}
+
+.friend-marker-label {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  background: rgba(11,18,32,0.92);
+  color: #ecf2ff;
+  border: 1px solid rgba(124,255,158,0.45);
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.28);
+}
+
 .map-wrap {
   position: relative;
   min-width: 0;

@@ -5,7 +5,7 @@ Deep research + working overlay software for Bitcraftmap.
 ## What this repo ships
 
 1. **Research findings** on the Bitcraftmap frontend/backend/API stack
-2. **A hosted static overlay app** that shows **Ael's live coordinates** on a **region-12-only** Bitcraft map
+2. **A hosted static overlay app** that shows **Ael's live coordinates** plus a tracked-player group on a **region-12-only** Bitcraft map
 3. **Region math** for Bitcraftmap regions
 4. **A cropped local terrain asset** for region 12, so the hosted app no longer loads the full-world map
 5. **Cached resource snapshots** for query-driven overlays like:
@@ -186,9 +186,10 @@ The hosted app:
 - does **not** load the full-world Bitcraft terrain map anymore
 - hard-locks the viewport to **region 12**
 - connects to `wss://live.bitjita.com`
-- subscribes to Ael's mobile entity channel
+- subscribes to Ael plus the tracked player group
 - converts `location_x` / `location_z` into map coordinates
 - draws a live Ael marker
+- draws labeled markers for tracked players directly on the map
 - loads cached region-12 resource snapshot points when available
 - supports manual pin drop for custom `X/Z` values **inside region 12 only**
 

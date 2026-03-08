@@ -39,7 +39,7 @@
           <div class="actions">
             <button id="recenterBtn" type="button">Recenter on Ael</button>
             <label class="toggle">
-              <input id="followToggle" type="checkbox" checked />
+              <input id="followToggle" type="checkbox" />
               <span>Follow live marker</span>
             </label>
           </div>
@@ -75,6 +75,12 @@
             <button id="manualPinBtn" type="button">Drop manual pin</button>
             <button id="clearManualPinBtn" type="button" class="secondary">Clear pin</button>
           </div>
+        </div>
+
+        <div class="panel">
+          <h2>Tracked players</h2>
+          <p class="muted small">Live when websocket events arrive, otherwise cached from player-detail data.</p>
+          <div id="trackedPlayersList" class="tracked-list"></div>
         </div>
 
         <div class="panel">
