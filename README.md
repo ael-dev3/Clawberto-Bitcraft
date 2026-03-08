@@ -179,7 +179,7 @@ Currently included:
 ## App behavior
 
 The hosted app:
-- renders a Bitcraft-style map with the same exported tile source
+- renders the real Bitcraft terrain map from `https://bitcraftmap.com/assets/maps/map.webp`
 - connects to `wss://live.bitjita.com`
 - subscribes to Ael's mobile entity channel
 - converts `location_x` / `location_z` into map coordinates

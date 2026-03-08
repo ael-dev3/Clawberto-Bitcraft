@@ -69,22 +69,10 @@ const map = L.map('map', {
 });
 
 const bounds = [[0, 0], [MAP_SIZE, MAP_SIZE]];
-const baseLayer = L.tileLayer(`${EXPORTS_CDN}/bitcraftmap/maps/tiles/{z}/{x}/{y}.webp`, {
-  bounds,
-  minZoom: -5,
-  maxZoom: 5,
-  minNativeZoom: -5,
-  maxNativeZoom: 0,
-  tileSize: 256,
-  keepBuffer: 4,
-  updateWhenZooming: false,
-  errorTileUrl: '',
+const baseLayer = L.imageOverlay('https://bitcraftmap.com/assets/maps/map.webp', bounds, {
   crossOrigin: true,
+  opacity: 1,
 });
-baseLayer._isValidTile = function (coords) {
-  const tileBounds = this._tileCoordsToBounds(coords);
-  return L.latLngBounds(bounds).overlaps(tileBounds);
-};
 baseLayer.addTo(map);
 
 const regionLayer = L.layerGroup().addTo(map);
