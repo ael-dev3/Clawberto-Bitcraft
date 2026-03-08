@@ -188,7 +188,9 @@ The hosted app:
 - connects to `wss://live.bitjita.com`
 - subscribes to Ael plus the tracked player group
 - converts `location_x` / `location_z` into map coordinates
-- draws a live Ael marker
+- uses **player-detail `locationX/locationZ`** as the anti-stale baseline
+- keeps websocket movement events as the freshest live source when available
+- draws a live/current Ael marker
 - draws labeled markers for tracked players directly on the map
 - loads cached region-12 resource snapshot points when available
 - supports manual pin drop for custom `X/Z` values **inside region 12 only**
@@ -266,7 +268,7 @@ What I built to stop that drift:
   - current zoom
 - the hosted build now uses a **cropped local region-12 terrain asset** instead of loading the full-world map
 - the viewport is hard-locked to **region 12**
-- scheduled GitHub Pages deploy refreshes the runtime Ael cache every **15 minutes**
+- scheduled GitHub Pages deploy refreshes the runtime Ael cache every **5 minutes** using player-detail location first and websocket movement when available
 - smoke-test workflow runs browser simulations on push and hourly against:
   - local build
   - hosted Pages site

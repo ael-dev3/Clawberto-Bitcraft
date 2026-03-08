@@ -51,7 +51,7 @@ if (!state.regionLabels) throw new Error(`Region label missing: ${JSON.stringify
 if (state.markers < 5) throw new Error(`Too few markers rendered: ${JSON.stringify(state)}`);
 if (!state.mapSize || state.mapSize.width < 500 || state.mapSize.height < 400) throw new Error(`Map container size invalid: ${JSON.stringify(state)}`);
 if (!state.status || /Boot error|Live feed error/i.test(state.status)) throw new Error(`Bad status: ${JSON.stringify(state)}`);
-if (!(state.source === 'live' || state.source === 'cached')) throw new Error(`Unexpected coordinate source: ${JSON.stringify(state)}`);
+if (!['live', 'cached', 'detail', 'detail-home'].includes(state.source)) throw new Error(`Unexpected coordinate source: ${JSON.stringify(state)}`);
 if (state.x === '—' || state.z === '—') throw new Error(`Coordinates missing: ${JSON.stringify(state)}`);
 if (!state.hasJericcho || !state.hasPinkCrayon || !state.hasJelly || !state.hasLongitude) throw new Error(`Tracked player names missing: ${JSON.stringify(state)}`);
 if (errors.length) throw new Error(`Browser errors: ${errors.join(' | ')}`);

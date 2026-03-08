@@ -11,16 +11,50 @@ try {
 } catch {}
 const previousById = new Map(previous.map((row) => [String(row.entityId), row]));
 
+function extractDetailBaseline(detail, prev = {}) {
+  const player = detail?.player || null;
+  if (!player) return {
+    x: prev.x ?? null,
+    z: prev.z ?? null,
+    regionId: prev.regionId ?? null,
+    source: prev.source || 'unknown',
+  };
+
+  if (typeof player.locationX === 'number' && typeof player.locationZ === 'number') {
+    return {
+      x: player.locationX,
+      z: player.locationZ,
+      regionId: typeof player.regionId === 'number' ? player.regionId : (prev.regionId ?? 12),
+      source: 'player-detail-location',
+    };
+  }
+
+  if (typeof player.teleportLocationX === 'number' && typeof player.teleportLocationZ === 'number') {
+    return {
+      x: player.teleportLocationX,
+      z: player.teleportLocationZ,
+      regionId: prev.regionId ?? 12,
+      source: 'player-detail-teleport',
+    };
+  }
+
+  return {
+    x: prev.x ?? null,
+    z: prev.z ?? null,
+    regionId: prev.regionId ?? null,
+    source: prev.source || 'unknown',
+  };
+}
+
 const merged = [];
 for (const player of players) {
   const prev = previousById.get(String(player.entityId)) || {};
-  let detail = {};
+  let detail = null;
   try {
     const resp = await fetch(`https://bitcraftmap.com/api/players/${player.entityId}`);
     const text = await resp.text();
     if (resp.ok && text.trim().startsWith('{')) {
-      const parsed = JSON.parse(text);
-      detail = parsed.player || {};
+      detail = JSON.parse(text);
     } else {
       console.warn(`player detail fallback for ${player.username}: non-json or non-ok response`);
     }
@@ -28,18 +62,18 @@ for (const player of players) {
     console.warn(`player detail fallback for ${player.username}: ${error.message}`);
   }
 
+  const baseline = extractDetailBaseline(detail, prev);
+  const playerDetail = detail?.player || null;
+
   merged.push({
     username: player.username,
     entityId: String(player.entityId),
-    x: typeof detail.teleportLocationX === 'number' ? detail.teleportLocationX : (prev.x ?? null),
-    z: typeof detail.teleportLocationZ === 'number' ? detail.teleportLocationZ : (prev.z ?? null),
-    regionId:
-      typeof detail.teleportLocationX === 'number' && typeof detail.teleportLocationZ === 'number'
-        ? 12
-        : (prev.regionId ?? null),
-    source: typeof detail.teleportLocationX === 'number' ? 'player-detail-teleport' : (prev.source || 'unknown'),
-    signedIn: typeof detail.signedIn === 'boolean' ? detail.signedIn : (prev.signedIn ?? null),
-    lastLoginTimestamp: detail.lastLoginTimestamp || prev.lastLoginTimestamp || null,
+    x: baseline.x,
+    z: baseline.z,
+    regionId: baseline.regionId,
+    source: baseline.source,
+    signedIn: typeof playerDetail?.signedIn === 'boolean' ? playerDetail.signedIn : (prev.signedIn ?? null),
+    lastLoginTimestamp: playerDetail?.lastLoginTimestamp || prev.lastLoginTimestamp || null,
   });
 }
 

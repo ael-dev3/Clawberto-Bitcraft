@@ -4,6 +4,7 @@ import path from 'node:path';
 const entityId = process.argv[2] || '648518346354069088';
 const username = process.argv[3] || 'Ael';
 const outPath = path.join(process.cwd(), 'runtime', 'ael-live.json');
+const detailUrl = `https://bitcraftmap.com/api/players/${entityId}`;
 
 let previous = null;
 try {
@@ -13,6 +14,52 @@ try {
 function save(payload) {
   return fs.writeFile(outPath, JSON.stringify(payload, null, 2) + '\n');
 }
+
+function extractDetailBaseline(detail) {
+  const player = detail?.player || null;
+  if (!player) return null;
+
+  if (typeof player.locationX === 'number' && typeof player.locationZ === 'number') {
+    return {
+      username,
+      entityId,
+      x: player.locationX,
+      z: player.locationZ,
+      regionId: typeof player.regionId === 'number' ? player.regionId : 12,
+      timestamp: null,
+      capturedAt: new Date().toISOString(),
+      source: 'player-detail-location',
+      signedIn: typeof player.signedIn === 'boolean' ? player.signedIn : null,
+      lastLoginTimestamp: player.lastLoginTimestamp || null,
+    };
+  }
+
+  if (typeof player.teleportLocationX === 'number' && typeof player.teleportLocationZ === 'number') {
+    return {
+      username,
+      entityId,
+      x: player.teleportLocationX,
+      z: player.teleportLocationZ,
+      regionId: 12,
+      timestamp: null,
+      capturedAt: new Date().toISOString(),
+      source: 'player-detail-teleport',
+      signedIn: typeof player.signedIn === 'boolean' ? player.signedIn : null,
+      lastLoginTimestamp: player.lastLoginTimestamp || null,
+    };
+  }
+
+  return null;
+}
+
+let detailBaseline = null;
+try {
+  const resp = await fetch(detailUrl);
+  const text = await resp.text();
+  if (resp.ok && text.trim().startsWith('{')) {
+    detailBaseline = extractDetailBaseline(JSON.parse(text));
+  }
+} catch {}
 
 const ws = new WebSocket('wss://live.bitjita.com');
 let latest = null;
@@ -41,6 +88,12 @@ const done = async (reason) => {
     return;
   }
 
+  if (detailBaseline) {
+    await save(detailBaseline);
+    console.log(`updated runtime cache from player detail (${reason})`);
+    return;
+  }
+
   if (previous) {
     const baseSource = String(previous.source || 'unknown').split(';')[0];
     const payload = {
@@ -53,7 +106,7 @@ const done = async (reason) => {
     return;
   }
 
-  throw new Error(`No live event captured and no previous cache to retain (${reason})`);
+  throw new Error(`No live event captured, no player detail, and no previous cache to retain (${reason})`);
 };
 
 ws.addEventListener('open', () => {

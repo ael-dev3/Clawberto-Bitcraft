@@ -1,11 +1,12 @@
 {
   "username": "Ael",
   "entityId": "648518346354069088",
-  "x": 8931.781,
-  "z": 16067.189,
+  "x": 11410,
+  "z": 16089,
   "regionId": 12,
-  "timestamp": 1772999532,
-  "capturedAt": "2026-03-08T19:57:18Z",
-  "source": "cached-bootstrap; retained-no-fresh-event",
-  "retainedAt": "2026-03-08T20:33:13.489Z"
+  "timestamp": null,
+  "capturedAt": "2026-03-08T21:40:25.635Z",
+  "source": "player-detail-location",
+  "signedIn": true,
+  "lastLoginTimestamp": "2026-03-08 13:42:01+00"
 }

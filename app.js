@@ -7,6 +7,8 @@ const TERRAIN_URL = './assets/terrain/region12.png';
 const RUNTIME_AEL_CACHE_URL = './runtime/ael-live.json';
 const TRACKED_PLAYERS_CACHE_URL = './runtime/tracked-players.json';
 const TRACKED_PLAYERS_CONFIG_URL = './data/tracked-players.json';
+const RUNTIME_CACHE_REFRESH_MS = 30000;
+const LIVE_FRESHNESS_SECONDS = 90;
 const FIXED_REGION_ID = 12;
 const DEFAULT_PLAYER = {
   username: 'Ael',
@@ -125,6 +127,7 @@ async function boot() {
     loadRequestedResourceSnapshots(),
   ]);
   connectLiveFeeds();
+  startRuntimePolling();
 }
 
 function setupButtons() {
@@ -198,11 +201,11 @@ async function loadRuntimeCache() {
         x: runtimeCache.x,
         z: runtimeCache.z,
         regionId: runtimeCache.regionId,
-        timestamp: runtimeCache.timestamp,
-        source: 'cached',
+        timestamp: runtimeCache.timestamp || runtimeCache.capturedAt || null,
+        source: runtimeCache.source === 'player-detail-location' ? 'detail' : runtimeCache.source === 'player-detail-teleport' ? 'detail-home' : 'cached',
         recenter: false,
       });
-      dom.status.textContent = 'Cached fix acquired';
+      dom.status.textContent = 'Runtime baseline acquired';
     }
   } catch (error) {
     console.warn('Runtime cache load failed', error);
@@ -222,7 +225,12 @@ async function loadTrackedPlayersCache() {
 
     const cacheById = new Map(trackedRuntimeCache.map((row) => [String(row.entityId), row]));
     for (const player of trackedPlayerConfig) {
-      const merged = { ...player, ...(cacheById.get(String(player.entityId)) || {}) };
+      const row = cacheById.get(String(player.entityId)) || {};
+      const merged = {
+        ...player,
+        ...row,
+        source: row.source === 'player-detail-location' ? 'detail' : row.source === 'player-detail-teleport' ? 'detail-home' : row.source,
+      };
       trackedPlayers.set(String(player.entityId), merged);
     }
     renderTrackedPlayers();
@@ -232,6 +240,13 @@ async function loadTrackedPlayersCache() {
   } finally {
     refreshDiagnostics();
   }
+}
+
+function startRuntimePolling() {
+  window.setInterval(() => {
+    refreshAelFromRuntimeCache().catch((error) => console.warn('Ael runtime refresh failed', error));
+    refreshTrackedPlayersFromRuntimeCache().catch((error) => console.warn('Tracked-player runtime refresh failed', error));
+  }, RUNTIME_CACHE_REFRESH_MS);
 }
 
 function connectLiveFeeds() {
@@ -292,6 +307,51 @@ function connectLiveFeeds() {
     }
     refreshDiagnostics();
   });
+}
+
+async function refreshAelFromRuntimeCache() {
+  try {
+    const res = await fetch(`${RUNTIME_AEL_CACHE_URL}?v=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) return;
+    const nextCache = await res.json();
+    runtimeCache = nextCache;
+    if (shouldKeepFreshLiveState(aelState)) return;
+    if (!Number.isFinite(nextCache?.x) || !Number.isFinite(nextCache?.z)) return;
+
+    setAelPosition({
+      x: nextCache.x,
+      z: nextCache.z,
+      regionId: nextCache.regionId,
+      timestamp: nextCache.timestamp || nextCache.capturedAt || null,
+      source: nextCache.source === 'player-detail-location' ? 'detail' : nextCache.source === 'player-detail-teleport' ? 'detail-home' : 'cached',
+      recenter: false,
+    });
+    dom.status.textContent = 'Runtime refresh';
+  } finally {
+    refreshDiagnostics();
+  }
+}
+
+async function refreshTrackedPlayersFromRuntimeCache() {
+  try {
+    const res = await fetch(`${TRACKED_PLAYERS_CACHE_URL}?v=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) return;
+    const rows = await res.json();
+    trackedRuntimeCache = rows;
+    for (const row of rows) {
+      const entityId = String(row.entityId);
+      const current = trackedPlayers.get(entityId);
+      if (!current) continue;
+      if (shouldKeepFreshLiveState(current)) continue;
+      updateTrackedPlayer(entityId, {
+        ...current,
+        ...row,
+        source: row.source === 'player-detail-location' ? 'detail' : row.source === 'player-detail-teleport' ? 'detail-home' : row.source,
+      });
+    }
+  } finally {
+    refreshDiagnostics();
+  }
 }
 
 function setAelPosition({ x, z, regionId, timestamp, source, recenter }) {
@@ -551,6 +611,18 @@ function refreshDiagnostics() {
   parts.push(`view z=${map.getZoom().toFixed(1)}`);
   dom.diagnosticsStatus.textContent = `Diagnostics: ${parts.join(' · ')}`;
   dom.diagnosticsStatus.className = aelKnown || terrainReady ? 'notice' : 'notice warn';
+}
+
+function shouldKeepFreshLiveState(player) {
+  if (!player || player.source !== 'live') return false;
+  return isFreshLiveTimestamp(player.timestamp);
+}
+
+function isFreshLiveTimestamp(timestamp) {
+  const value = Number(timestamp);
+  if (!Number.isFinite(value) || value <= 0) return false;
+  const now = Math.floor(Date.now() / 1000);
+  return Math.abs(now - value) <= LIVE_FRESHNESS_SECONDS;
 }
 
 function parseIdList(raw) {
