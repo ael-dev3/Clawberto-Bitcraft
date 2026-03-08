@@ -1,6 +1,7 @@
 node_modules/
 tmp/
 smoke-test.png
+qa-*.png
 tmp-*.png
 tmp-*.json
 .DS_Store
