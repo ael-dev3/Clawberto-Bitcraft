@@ -3,12 +3,30 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "update:ael-cache": "node scripts/update-ael-live-cache.mjs",
-    "update:tracked-cache": "node scripts/update-tracked-players-cache.mjs",
-    "smoke:local": "node scripts/smoke-test-overlay.mjs http://127.0.0.1:8131/",
-    "smoke:hosted": "node scripts/smoke-test-overlay.mjs https://ael-dev3.github.io/Clawberto-Bitcraft/"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run typecheck && npm run test && npm run build",
+    "update:ael-cache": "node --import tsx scripts/update-ael-live-cache.ts",
+    "update:tracked-cache": "node --import tsx scripts/update-tracked-players-cache.ts",
+    "query:ael-live": "node --import tsx scripts/query-ael-live.ts",
+    "fetch:resource": "node --import tsx scripts/fetch-resource-snapshot.ts",
+    "smoke:test": "node --import tsx scripts/smoke-test-overlay.ts",
+    "smoke:local": "node --import tsx scripts/smoke-local.ts",
+    "smoke:hosted": "npm run smoke:test -- https://ael-dev3.github.io/Clawberto-Bitcraft/"
+  },
+  "dependencies": {
+    "zod": "4.3.6"
   },
   "devDependencies": {
-    "playwright": "^1.52.0"
+    "@types/node": "22.19.11",
+    "playwright": "1.58.2",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3",
+    "vite": "5.4.21",
+    "vitest": "2.1.9"
   }
 }

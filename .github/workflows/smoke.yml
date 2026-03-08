@@ -21,24 +21,31 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
 
       - name: Install dependencies
         run: |
-          npm install
+          npm ci
           npx playwright install --with-deps chromium
 
       - name: Refresh runtime caches
         run: |
-          node scripts/update-ael-live-cache.mjs
-          node scripts/update-tracked-players-cache.mjs
+          npm run update:ael-cache
+          npm run update:tracked-cache
 
-      - name: Start local server
+      - name: Typecheck and test
         run: |
-          python3 -m http.server 8131 > /tmp/bitcraft-smoke-http.log 2>&1 &
-          echo $! > /tmp/bitcraft-smoke-http.pid
+          npm run typecheck
+          npm run test
+          npm run build
+
+      - name: Start Vite preview server
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 8131 > /tmp/bitcraft-vite-preview.log 2>&1 &
+          echo $! > /tmp/bitcraft-vite-preview.pid
 
       - name: Run local smoke test
-        run: node scripts/smoke-test-overlay.mjs http://127.0.0.1:8131/
+        run: npm run smoke:test -- http://127.0.0.1:8131/
 
       - name: Run hosted smoke test
-        run: node scripts/smoke-test-overlay.mjs https://ael-dev3.github.io/Clawberto-Bitcraft/
+        run: npm run smoke:hosted

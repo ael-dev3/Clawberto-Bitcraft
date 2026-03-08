@@ -1,290 +1,163 @@
 # Clawberto-Bitcraft
 
-Deep research + working overlay software for Bitcraftmap.
+Production-oriented Bitcraft overlay research and mapping app, modernized to a small Vite + TypeScript toolchain without changing the core Leaflet map model.
 
 ## What this repo ships
 
-1. **Research findings** on the Bitcraftmap frontend/backend/API stack
-2. **A hosted static overlay app** that shows **Ael's live coordinates** plus a tracked-player group on a **region-12-only** Bitcraft map
-3. **Region math** for Bitcraftmap regions
-4. **A cropped local terrain asset** for region 12, so the hosted app no longer loads the full-world map
-5. **Cached resource snapshots** for query-driven overlays like:
-   - `?resourceId=1180909566`
-6. **GitHub Pages deployment** so the app can be hosted online from this repo
+1. A Vite-built static site for GitHub Pages
+2. A region-12-only Leaflet overlay for Ael plus tracked players
+3. Runtime JSON caches for hosted Ael and tracked-player refreshes
+4. Cached resource snapshots for region-scoped overlays
+5. Shared Zod schemas used by both the browser app and cache refresh scripts
+6. Smoke tests and unit tests for the current hosted behavior
 
-## Hosted app
+## Current app behavior
 
-After GitHub Pages deploys, use:
+The app still preserves the original user-facing behavior:
 
-- `https://ael-dev3.github.io/Clawberto-Bitcraft/`
-- example: `https://ael-dev3.github.io/Clawberto-Bitcraft/?resourceId=1180909566`
+- fixed region 12 terrain only
+- live Ael websocket tracking with runtime-cache fallback
+- tracked players with websocket movement updates plus player-detail fallback
+- runtime JSON refresh polling in the browser
+- manual pin placement inside region 12 only
+- map popups and collision-aware player labels
+- cached resource overlays driven by `resourceId`
+- hosted GitHub Pages deployment from built output
 
-This hosted build is now hard-locked to **region 12**.
+## Modernized structure
 
-## Main result
+```text
+src/
+  app/                  app controller, map controller, typed browser modules
+  shared/               region math, schemas, websocket normalization, helpers
+  ui/                   DOM bindings and styling
+public/
+  assets/terrain/       static terrain image copied into the build
+  data/                 tracked-player config and cached resource snapshots
+  runtime/              hosted runtime cache JSON files
+scripts/
+  *.ts                  typed cache refresh, smoke, and utility scripts
+tests/
+  *.test.ts             helper/schema regression coverage
+```
 
-I found a better path than using Balduran as the live feed.
+## Local development
 
-### Native Bitcraft live tracking path
+Install dependencies:
 
-Bitcraftmap itself exposes:
-- player search API on `bitcraftmap.com/api/players`
-- player detail API on `bitcraftmap.com/api/players/:entityId`
-- live websocket on `wss://live.bitjita.com`
+```bash
+npm install
+```
 
-For **Ael**:
-- entity ID: `648518346354069088`
-- official Bitcraftmap detail API works:
-  - `GET https://bitcraftmap.com/api/players/648518346354069088`
-- live mobile entity websocket subscription works:
-  - channel: `mobile_entity_state:648518346354069088`
+Run the dev server:
 
-That live websocket returns updates like:
-- `location_x`
-- `location_z`
-- `region_id`
-- `destination_x`
-- `destination_z`
+```bash
+npm run dev
+```
 
-Those coordinates are scaled by `1000`, so:
+Create a production build:
+
+```bash
+npm run build
+```
+
+Preview the built site locally:
+
+```bash
+npm run preview
+```
+
+Run typecheck, tests, and build together:
+
+```bash
+npm run check
+```
+
+Run the local production smoke test:
+
+```bash
+npm run smoke:local
+```
+
+## Runtime cache refresh scripts
+
+Refresh the hosted Ael cache:
+
+```bash
+npm run update:ael-cache
+```
+
+Refresh the tracked-player cache:
+
+```bash
+npm run update:tracked-cache
+```
+
+Inspect Ael's live websocket payloads:
+
+```bash
+npm run query:ael-live
+```
+
+Add another cached resource snapshot:
+
+```bash
+npm run fetch:resource -- 12 1180909566
+```
+
+That writes to:
+
+```text
+public/data/resources/12/1180909566.json
+```
+
+## Query params
+
+- `resourceId=1180909566`
+- `center=9342.399,16389.730`
+- `zoom=1.2`
+
+Notes:
+
+- the build is fixed to `regionId=12`
+- centers outside region 12 are ignored
+
+## GitHub Pages deployment
+
+The production site is built with `base: './'`, so generated asset URLs stay relative and continue working on GitHub Pages subpaths.
+
+The Pages workflow now:
+
+1. installs dependencies
+2. refreshes the runtime cache JSON files
+3. builds the site into `dist/`
+4. uploads `dist/` to GitHub Pages
+
+## Research summary
+
+The repo still uses the same verified Bitcraft data path:
+
+- player detail from `https://bitcraftmap.com/api/players/:entityId`
+- live movement from `wss://live.bitjita.com`
+- region resource data from `https://bcmap-api.bitjita.com/region{regionId}/resource/{resourceId}`
+
+Coordinates from the live websocket remain scaled by `1000`, so the overlay still converts:
 
 ```text
 display_x = location_x / 1000
 display_z = location_z / 1000
 ```
 
-Example live event observed during research:
-
-```json
-{
-  "type": "event",
-  "channel": "mobile_entity_state:648518346354069088",
-  "data": {
-    "location_x": 9342399,
-    "location_z": 16389730,
-    "region_id": "12"
-  }
-}
-```
-
-Which means:
-- `X = 9342.399`
-- `Z = 16389.730`
-- `Region = 12`
-
-## What frontend Bitcraftmap uses
-
-Studied directly from the live production bundle.
-
-### Frontend stack
-
-- **SvelteKit** frontend
-- **Leaflet** map engine
-- **Leaflet.markercluster** for point clustering
-- **Cloudflare** in front
-- Bitcraft map tiles from `https://exports.bitjita.com`
-- live websocket from `wss://live.bitjita.com`
-
-### Key frontend facts extracted from the bundle
-
-- route is query-param driven via:
-  - `resourceId`
-  - `regionId`
-  - `enemyId`
-  - `playerId`
-  - `followPlayer`
-  - `center`
-  - `zoom`
-- active selectable regions in the live UI are:
-  - `7, 8, 9, 12, 13, 14, 17, 18, 19`
-- map size is:
-  - width `38400`
-  - height `38400`
-- exported tile path used by Bitcraftmap:
-  - `${exportsCdn}/bitcraftmap/maps/tiles/{z}/{x}/{y}.webp`
-
-## What backend/services it connects to
-
-### 1. bitcraftmap.com
-Used for player/resource search APIs:
-
-- `GET /api/players?q=<query>`
-- `GET /api/players/:entityId`
-- `GET /api/resources?q=<query>`
-
-### 2. bcmap-api.bitjita.com
-Used for region-scoped GeoJSON payloads:
-
-- `GET /region{regionId}/resource/{resourceId}`
-- `GET /region{regionId}/enemy/{enemyId}`
-
-Example confirmed working:
-
-- `https://bcmap-api.bitjita.com/region12/resource/1180909566`
-
-### 3. live.bitjita.com
-Used for live websocket subscriptions:
-
-- `mobile_entity_state:{entityId}`
-- `resource_state:resource_id:{resourceId}`
-
-### 4. exports.bitjita.com
-Used for exported map tiles and overlays.
-
-## Region math
-
-The map is a `38400 x 38400` world and the region grid is effectively `5 x 5`.
-
-So:
+Region math is unchanged:
 
 ```text
 region_size = 38400 / 5 = 7680
+regionId = floor(z / 7680) * 5 + floor(x / 7680) + 1
 ```
 
-### Region ID from coordinates
-
-Using world coordinates `(x, z)`:
+Region 12 bounds remain:
 
 ```text
-col = floor(x / 7680)
-row = floor(z / 7680)
-regionId = row * 5 + col + 1
+x: 7680 .. 15360
+z: 15360 .. 23040
 ```
-
-### Region 12 bounds
-
-```text
-x:  7680  .. 15360
-z: 15360  .. 23040
-```
-
-This matches live Ael samples observed from both:
-- Balduran map relay
-- native Bitcraft websocket
-
-## Why the app uses cached resource snapshots
-
-The resource GeoJSON API responds with CORS locked to:
-- `https://bitcraftmap.com`
-
-That means a GitHub Pages app cannot freely fetch arbitrary live resource GeoJSON from the browser.
-
-So this repo does two things:
-- overlays **live Ael coordinates** natively from the websocket
-- loads **cached resource snapshots** from repo data files for supported examples
-
-Currently included:
-- `data/resources/12/1180909566.json`
-  - resource `1180909566`
-  - region `12`
-  - 3756 points
-
-## App behavior
-
-The hosted app:
-- renders a **cropped local region-12 terrain asset** at `assets/terrain/region12.png`
-- does **not** load the full-world Bitcraft terrain map anymore
-- hard-locks the viewport to **region 12**
-- connects to `wss://live.bitjita.com`
-- subscribes to Ael plus the tracked player group
-- converts `location_x` / `location_z` into map coordinates
-- uses **player-detail `locationX/locationZ`** as the anti-stale baseline
-- keeps websocket movement events as the freshest live source when available
-- draws a live/current Ael marker
-- draws labeled markers for tracked players directly on the map
-- loads cached region-12 resource snapshot points when available
-- supports manual pin drop for custom `X/Z` values **inside region 12 only**
-
-## Query params supported by this app
-
-- `resourceId=1180909566`
-- `center=9342.399,16389.730` (only if inside region 12)
-- `zoom=1.2`
-
-Notes:
-- `regionId` is no longer needed; this build is fixed to region 12.
-- centers outside region 12 are ignored.
-
-Example:
-
-```text
-/?resourceId=1180909566
-```
-
-## Repo structure
-
-- `index.html` — hosted app shell
-- `app.js` — map, websocket, overlay logic
-- `style.css` — UI styling
-- `assets/terrain/region12.png` — cropped region-12 terrain asset
-- `data/resources/12/1180909566.json` — cached resource snapshot
-- `research/findings.md` — detailed research notes
-- `scripts/query-ael-live.mjs` — CLI to inspect live Ael websocket data
-- `scripts/fetch-resource-snapshot.mjs` — CLI to cache a region/resource GeoJSON file
-- `.github/workflows/pages.yml` — GitHub Pages deploy workflow
-
-## Local development
-
-Serve statically:
-
-```bash
-python3 -m http.server 8000
-```
-
-Then open:
-
-```text
-http://localhost:8000/
-```
-
-## Add another cached resource snapshot
-
-```bash
-node scripts/fetch-resource-snapshot.mjs 12 1180909566
-```
-
-That writes to:
-
-```text
-data/resources/12/1180909566.json
-```
-
-## Drift diagnosis and fixes
-
-Where I drifted before:
-- I validated **assets and headers**, but not the **rendered hosted page state**.
-- I assumed the terrain problem was only a bad layer URL, but the bigger hosted failure was:
-  - opening too zoomed out
-  - no immediate fallback marker unless a live websocket event arrived
-- I had no enforceable rule saying **"do not claim hosted success until a browser simulation sees terrain + marker + coordinates"**.
-
-What I built to stop that drift:
-- default view now opens on **region 12**, not the full-world tiny overview
-- hosted app now loads a **runtime Ael cache** so it shows a marker even before the next live websocket event
-- runtime diagnostics panel now shows:
-  - terrain status
-  - cache status
-  - marker readiness
-  - current zoom
-- the hosted build now uses a **cropped local region-12 terrain asset** instead of loading the full-world map
-- the viewport is hard-locked to **region 12**
-- scheduled GitHub Pages deploy refreshes the runtime Ael cache every **5 minutes** using player-detail location first and websocket movement when available
-- smoke-test workflow runs browser simulations on push and hourly against:
-  - local build
-  - hosted Pages site
-- smoke test asserts:
-  - the **region12.png** terrain asset loaded
-  - marker rendered
-  - coordinates present
-  - region label present
-  - no bad boot/feed status
-
-## Findings quality bar
-
-This repo is based on:
-- direct bundle inspection of production Bitcraftmap code
-- live API queries against public Bitcraftmap endpoints
-- live websocket subscription tests against the native Bitcraft live feed
-- direct resource GeoJSON retrieval for the example resource in region 12
-- cross-checking region math against observed coordinates
-- browser render simulations against both local and hosted versions
