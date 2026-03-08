@@ -317,6 +317,12 @@ class OverlayApp {
         return;
       }
 
+      const livePoint = { x: liveState.x, z: liveState.z };
+      if (!isInsideFixedRegion(livePoint)) {
+        console.warn('Ignoring off-map live update for fixed region-12 build', liveState);
+        return;
+      }
+
       if (liveState.entityId === DEFAULT_PLAYER.entityId) {
         this.setAelPosition({
           x: liveState.x,
