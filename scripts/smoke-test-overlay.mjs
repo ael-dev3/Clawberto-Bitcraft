@@ -38,6 +38,7 @@ const state = await page.evaluate(() => {
     hasJericcho: bodyText.includes('Jericcho'),
     hasPinkCrayon: bodyText.includes('PinkCrayon'),
     hasJelly: bodyText.includes('Jelly'),
+    hasLongitude: bodyText.includes('Longitude'),
   };
 });
 
@@ -52,7 +53,7 @@ if (!state.mapSize || state.mapSize.width < 500 || state.mapSize.height < 400) t
 if (!state.status || /Boot error|Live feed error/i.test(state.status)) throw new Error(`Bad status: ${JSON.stringify(state)}`);
 if (!(state.source === 'live' || state.source === 'cached')) throw new Error(`Unexpected coordinate source: ${JSON.stringify(state)}`);
 if (state.x === '—' || state.z === '—') throw new Error(`Coordinates missing: ${JSON.stringify(state)}`);
-if (!state.hasJericcho || !state.hasPinkCrayon || !state.hasJelly) throw new Error(`Tracked player names missing: ${JSON.stringify(state)}`);
+if (!state.hasJericcho || !state.hasPinkCrayon || !state.hasJelly || !state.hasLongitude) throw new Error(`Tracked player names missing: ${JSON.stringify(state)}`);
 if (errors.length) throw new Error(`Browser errors: ${errors.join(' | ')}`);
 
 console.log(JSON.stringify({ ok: true, url: targetUrl, state }, null, 2));
