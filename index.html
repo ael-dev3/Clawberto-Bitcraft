@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Clawberto Bitcraft Overlay</title>
+    <meta
+      name="description"
+      content="Overlay Ael's live Bitcraft coordinates on a Bitcraft-style map, with region math and cached resource snapshots."
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin="anonymous"
+    />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="sidebar">
+        <div class="panel">
+          <h1>Clawberto Bitcraft</h1>
+          <p class="muted">
+            Live Ael overlay on a Bitcraft-style map, built from public Bitcraftmap research.
+          </p>
+        </div>
+
+        <div class="panel">
+          <h2>Live Ael feed</h2>
+          <div class="kv"><span>Status</span><strong id="status">Connecting…</strong></div>
+          <div class="kv"><span>Username</span><strong>Ael</strong></div>
+          <div class="kv"><span>Entity ID</span><code id="entityId">648518346354069088</code></div>
+          <div class="kv"><span>X</span><strong id="coordX">—</strong></div>
+          <div class="kv"><span>Z</span><strong id="coordZ">—</strong></div>
+          <div class="kv"><span>Region</span><strong id="coordRegion">—</strong></div>
+          <div class="kv"><span>Timestamp</span><strong id="coordTimestamp">—</strong></div>
+          <div class="actions">
+            <button id="recenterBtn" type="button">Recenter on Ael</button>
+            <label class="toggle">
+              <input id="followToggle" type="checkbox" checked />
+              <span>Follow live marker</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>URL-driven overlay</h2>
+          <p class="muted small">
+            Supported params: <code>regionId</code>, <code>resourceId</code>, <code>center</code>, <code>zoom</code>.
+          </p>
+          <div class="kv"><span>Requested regions</span><strong id="requestedRegions">—</strong></div>
+          <div class="kv"><span>Requested resources</span><strong id="requestedResources">—</strong></div>
+          <div id="resourceStatus" class="notice">No resource snapshot requested.</div>
+          <div class="links">
+            <a id="officialLink" href="https://bitcraftmap.com/" target="_blank" rel="noreferrer">Open official Bitcraftmap</a>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Manual pin</h2>
+          <div class="grid2">
+            <label>
+              <span>X</span>
+              <input id="manualX" type="number" step="0.001" placeholder="9342.399" />
+            </label>
+            <label>
+              <span>Z</span>
+              <input id="manualZ" type="number" step="0.001" placeholder="16389.730" />
+            </label>
+          </div>
+          <div class="actions">
+            <button id="manualPinBtn" type="button">Drop manual pin</button>
+            <button id="clearManualPinBtn" type="button" class="secondary">Clear pin</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Research notes</h2>
+          <ul class="notes">
+            <li>Frontend studied: SvelteKit + Leaflet + WebSocket + Cloudflare.</li>
+            <li>Live player feed comes from <code>wss://live.bitjita.com</code>.</li>
+            <li>Public player search/details come from <code>/api/players</code> on <code>bitcraftmap.com</code>.</li>
+            <li>Region resource GeoJSON comes from <code>https://bcmap-api.bitjita.com/region{n}/resource/{id}</code>.</li>
+            <li>That resource API is CORS-locked to <code>bitcraftmap.com</code>, so this hosted app uses local cached snapshots for example resources.</li>
+          </ul>
+        </div>
+      </aside>
+
+      <main class="map-wrap">
+        <div id="map"></div>
+      </main>
+    </div>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin="anonymous"
+    ></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
