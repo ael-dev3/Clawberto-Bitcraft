@@ -3,16 +3,16 @@ const REGION_GRID = 5;
 const REGION_SIZE = MAP_SIZE / REGION_GRID;
 const APOTHEM = 2 / Math.sqrt(3);
 const LIVE_WS = 'wss://live.bitjita.com';
-const TERRAIN_URL = 'https://bitcraftmap.com/assets/maps/map.webp';
+const TERRAIN_URL = './assets/terrain/region12.png';
 const RUNTIME_AEL_CACHE_URL = './runtime/ael-live.json';
+const FIXED_REGION_ID = 12;
 const DEFAULT_PLAYER = {
   username: 'Ael',
   entityId: '648518346354069088',
-  defaultRegionId: 12,
+  defaultRegionId: FIXED_REGION_ID,
 };
 
 const params = new URLSearchParams(window.location.search);
-const requestedRegionIds = parseIdList(params.get('regionId'));
 const requestedResourceIds = parseIdList(params.get('resourceId'));
 const requestedCenter = parseCenter(params.get('center'));
 const requestedZoom = params.get('zoom') ? Number(params.get('zoom')) : null;
@@ -38,14 +38,8 @@ const dom = {
   clearManualPinBtn: document.getElementById('clearManualPinBtn'),
 };
 
-dom.entityId.textContent = DEFAULT_PLAYER.entityId;
-dom.requestedRegions.textContent = requestedRegionIds.length ? requestedRegionIds.join(', ') : 'none';
-dom.requestedResources.textContent = requestedResourceIds.length ? requestedResourceIds.join(', ') : 'none';
-dom.officialLink.href = makeOfficialLink(requestedRegionIds, requestedResourceIds);
-
-dom.status.textContent = 'Booting';
-dom.coordSource.textContent = 'none';
-dom.diagnosticsStatus.textContent = 'Loading terrain + runtime cache + live feed…';
+const fixedRegion = getRegionBounds(FIXED_REGION_ID);
+const regionBounds = [[fixedRegion.zMin, fixedRegion.xMin], [fixedRegion.zMax, fixedRegion.xMax]];
 
 const crs = L.extend({}, L.CRS.Simple, {
   projection: {
@@ -71,13 +65,14 @@ const map = L.map('map', {
   attributionControl: false,
   zoomControl: true,
   boxZoom: false,
-  minZoom: -5,
+  minZoom: -2,
   maxZoom: 5,
   zoomSnap: 0.1,
+  maxBounds: regionBounds,
+  maxBoundsViscosity: 1,
 });
 
-const bounds = [[0, 0], [MAP_SIZE, MAP_SIZE]];
-const terrainLayer = L.imageOverlay(TERRAIN_URL, bounds, {
+const terrainLayer = L.imageOverlay(TERRAIN_URL, regionBounds, {
   crossOrigin: true,
   opacity: 1,
 });
@@ -96,6 +91,14 @@ let aelKnown = false;
 let runtimeCache = null;
 let terrainReady = false;
 
+dom.entityId.textContent = DEFAULT_PLAYER.entityId;
+dom.requestedRegions.textContent = '12 (fixed build)';
+dom.requestedResources.textContent = requestedResourceIds.length ? requestedResourceIds.join(', ') : 'none';
+dom.officialLink.href = makeOfficialLink(requestedResourceIds);
+dom.status.textContent = 'Booting';
+dom.coordSource.textContent = 'none';
+dom.diagnosticsStatus.textContent = 'Loading region-12 terrain + runtime cache + live feed…';
+
 boot().catch((error) => {
   console.error(error);
   dom.status.textContent = 'Boot error';
@@ -106,7 +109,7 @@ boot().catch((error) => {
 async function boot() {
   setupButtons();
   applyInitialView();
-  drawRequestedRegions();
+  drawRegionFrame();
   await Promise.all([
     verifyTerrainImage(),
     loadRuntimeCache(),
@@ -119,42 +122,45 @@ function setupButtons() {
   dom.recenterBtn.addEventListener('click', () => {
     if (!aelKnown) return;
     const ll = aelMarker.getLatLng();
-    map.setView(ll, Math.max(map.getZoom(), 0.8));
+    map.setView(ll, Math.max(map.getZoom(), 1.2));
   });
 
   dom.manualPinBtn.addEventListener('click', () => {
     const x = Number(dom.manualX.value);
     const z = Number(dom.manualZ.value);
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+    if (!isInsideFixedRegion(x, z)) {
+      dom.diagnosticsStatus.textContent = 'Manual pin rejected: this build only shows region 12.';
+      dom.diagnosticsStatus.className = 'notice warn';
+      return;
+    }
     if (manualMarker) markerLayer.removeLayer(manualMarker);
     manualMarker = L.marker([z, x], {
       icon: L.divIcon({ className: 'manual-marker', iconSize: [16, 16], iconAnchor: [8, 8] }),
     }).bindPopup(`Manual pin<br>X ${x.toFixed(3)}<br>Z ${z.toFixed(3)}<br>Region ${regionIdFromCoord(x, z) ?? 'unknown'}`);
     markerLayer.addLayer(manualMarker);
-    map.setView([z, x], Math.max(map.getZoom(), 0.8));
+    map.setView([z, x], Math.max(map.getZoom(), 1.2));
+    refreshDiagnostics();
   });
 
   dom.clearManualPinBtn.addEventListener('click', () => {
     if (!manualMarker) return;
     markerLayer.removeLayer(manualMarker);
     manualMarker = null;
+    refreshDiagnostics();
   });
 }
 
 function applyInitialView() {
-  if (requestedCenter && Number.isFinite(requestedZoom)) {
+  if (requestedCenter && Number.isFinite(requestedZoom) && isInsideFixedRegion(requestedCenter.x, requestedCenter.z)) {
     map.setView([requestedCenter.z, requestedCenter.x], requestedZoom);
     return;
   }
-
-  const initialRegion = requestedRegionIds[0] || DEFAULT_PLAYER.defaultRegionId;
-  const first = getRegionBounds(initialRegion);
-  map.fitBounds([[first.zMin, first.xMin], [first.zMax, first.xMax]], { padding: [32, 32] });
+  map.fitBounds(regionBounds, { padding: [24, 24] });
 }
 
 async function verifyTerrainImage() {
   const img = new Image();
-  img.crossOrigin = 'anonymous';
   const loaded = await new Promise((resolve) => {
     img.onload = () => resolve(true);
     img.onerror = () => resolve(false);
@@ -167,7 +173,7 @@ async function verifyTerrainImage() {
     return;
   }
 
-  dom.diagnosticsStatus.textContent = 'Terrain image failed to load.';
+  dom.diagnosticsStatus.textContent = 'Region-12 terrain image failed to load.';
   dom.diagnosticsStatus.className = 'notice warn';
 }
 
@@ -199,7 +205,6 @@ async function loadRuntimeCache() {
 
 function connectAelFeed() {
   dom.status.textContent = runtimeCache ? 'Waiting for live feed' : 'Connecting to live feed';
-
   const ws = new WebSocket(LIVE_WS);
 
   ws.addEventListener('open', () => {
@@ -257,68 +262,69 @@ function setAelPosition({ x, z, regionId, timestamp, source, recenter }) {
   dom.coordTimestamp.textContent = timestamp ? String(timestamp) : 'unknown';
   aelKnown = true;
 
-  if (recenter) {
+  if (regionId != null && Number(regionId) !== FIXED_REGION_ID) {
+    dom.diagnosticsStatus.textContent = `Ael moved outside region 12 (now in region ${regionId}). This build stays locked to region 12.`;
+    dom.diagnosticsStatus.className = 'notice warn';
+    return;
+  }
+
+  if (recenter && isInsideFixedRegion(x, z)) {
     map.setView(latLng, Math.max(map.getZoom(), 1.2), { animate: false });
   }
 }
 
-function drawRequestedRegions() {
-  const regions = requestedRegionIds.length ? requestedRegionIds : [DEFAULT_PLAYER.defaultRegionId];
-  for (const regionId of regions) {
-    const r = getRegionBounds(regionId);
-    const rect = L.rectangle([[r.zMin, r.xMin], [r.zMax, r.xMax]], {
-      color: regionId === DEFAULT_PLAYER.defaultRegionId ? '#63d2ff' : '#7cff9e',
-      weight: 2,
-      fillColor: regionId === DEFAULT_PLAYER.defaultRegionId ? '#63d2ff' : '#7cff9e',
-      fillOpacity: 0.06,
-    });
-    rect.bindTooltip(`Region ${regionId}`, { permanent: true, direction: 'center', className: 'region-label' });
-    regionLayer.addLayer(rect);
-  }
+function drawRegionFrame() {
+  const rect = L.rectangle(regionBounds, {
+    color: '#63d2ff',
+    weight: 2,
+    fillColor: '#63d2ff',
+    fillOpacity: 0.04,
+  });
+  rect.bindTooltip('Region 12', { permanent: true, direction: 'center', className: 'region-label' });
+  regionLayer.addLayer(rect);
 }
 
 async function loadRequestedResourceSnapshots() {
-  if (!requestedRegionIds.length || !requestedResourceIds.length) {
-    dom.resourceStatus.textContent = 'No resource snapshot requested.';
+  if (!requestedResourceIds.length) {
+    dom.resourceStatus.textContent = 'No region-12 resource snapshot requested.';
     return;
   }
 
   const loaded = [];
   const missing = [];
 
-  for (const regionId of requestedRegionIds) {
-    for (const resourceId of requestedResourceIds) {
-      const path = `./data/resources/${regionId}/${resourceId}.json`;
-      try {
-        const res = await fetch(path);
-        if (!res.ok) {
-          missing.push(`${regionId}/${resourceId}`);
-          continue;
-        }
-        const geojson = await res.json();
-        const coords = geojson?.features?.[0]?.geometry?.coordinates || [];
-        for (const [x, z] of coords) {
-          L.circleMarker([z, x], {
-            renderer: resourceRenderer,
-            radius: 2.6,
-            weight: 0,
-            fillOpacity: 0.65,
-            fillColor: '#ffcc66',
-          }).addTo(resourceLayer);
-        }
-        loaded.push({ regionId, resourceId, count: coords.length });
-      } catch (error) {
-        missing.push(`${regionId}/${resourceId}`);
+  for (const resourceId of requestedResourceIds) {
+    const path = `./data/resources/${FIXED_REGION_ID}/${resourceId}.json`;
+    try {
+      const res = await fetch(path);
+      if (!res.ok) {
+        missing.push(`${FIXED_REGION_ID}/${resourceId}`);
+        continue;
       }
+      const geojson = await res.json();
+      const coords = geojson?.features?.[0]?.geometry?.coordinates || [];
+      for (const [x, z] of coords) {
+        if (!isInsideFixedRegion(x, z)) continue;
+        L.circleMarker([z, x], {
+          renderer: resourceRenderer,
+          radius: 2.6,
+          weight: 0,
+          fillOpacity: 0.65,
+          fillColor: '#ffcc66',
+        }).addTo(resourceLayer);
+      }
+      loaded.push({ regionId: FIXED_REGION_ID, resourceId, count: coords.length });
+    } catch (error) {
+      missing.push(`${FIXED_REGION_ID}/${resourceId}`);
     }
   }
 
   if (loaded.length) {
     const summary = loaded.map((x) => `resource ${x.resourceId} in region ${x.regionId}: ${x.count} points`).join(' · ');
-    dom.resourceStatus.textContent = `Loaded cached snapshot: ${summary}`;
+    dom.resourceStatus.textContent = `Loaded cached region-12 snapshot: ${summary}`;
     dom.resourceStatus.className = 'notice';
   } else {
-    dom.resourceStatus.textContent = 'Requested resource snapshot not cached here yet. Open the official link or add a new cache file in the repo.';
+    dom.resourceStatus.textContent = 'Requested region-12 resource snapshot not cached here yet.';
     dom.resourceStatus.className = 'notice warn';
   }
 
@@ -329,7 +335,7 @@ async function loadRequestedResourceSnapshots() {
 
 function refreshDiagnostics() {
   const parts = [];
-  parts.push(terrainReady ? 'terrain ok' : 'terrain pending');
+  parts.push(terrainReady ? 'region12 terrain ok' : 'terrain pending');
   parts.push(runtimeCache ? 'cache ok' : 'no cache');
   parts.push(aelKnown ? 'marker ready' : 'no marker yet');
   parts.push(`view z=${map.getZoom().toFixed(1)}`);
@@ -371,9 +377,13 @@ function getRegionBounds(regionId) {
   return { row, col, xMin, xMax, zMin, zMax };
 }
 
-function makeOfficialLink(regionIds, resourceIds) {
+function isInsideFixedRegion(x, z) {
+  return x >= fixedRegion.xMin && x <= fixedRegion.xMax && z >= fixedRegion.zMin && z <= fixedRegion.zMax;
+}
+
+function makeOfficialLink(resourceIds) {
   const url = new URL('https://bitcraftmap.com/');
-  if (regionIds.length) url.searchParams.set('regionId', regionIds.join(','));
+  url.searchParams.set('regionId', String(FIXED_REGION_ID));
   if (resourceIds.length) url.searchParams.set('resourceId', resourceIds.join(','));
   return url.toString();
 }

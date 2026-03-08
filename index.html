@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Clawberto Bitcraft Overlay</title>
+    <title>Clawberto Bitcraft Overlay — Region 12</title>
     <meta
       name="description"
-      content="Overlay Ael's live Bitcraft coordinates on a Bitcraft-style map, with region math and cached resource snapshots."
+      content="Region-12-only Bitcraft overlay for Ael's live coordinates, with cached resource snapshots and no full-world map load."
     />
     <link
       rel="stylesheet"
@@ -20,9 +20,9 @@
     <div class="layout">
       <aside class="sidebar">
         <div class="panel">
-          <h1>Clawberto Bitcraft</h1>
+          <h1>Clawberto Bitcraft — Region 12</h1>
           <p class="muted">
-            Live Ael overlay on a Bitcraft-style map, built from public Bitcraftmap research.
+            Live Ael overlay focused only on Bitcraft region 12, using a cropped region-only terrain asset.
           </p>
         </div>
 
@@ -46,9 +46,9 @@
         </div>
 
         <div class="panel">
-          <h2>URL-driven overlay</h2>
+          <h2>Region-12 overlay</h2>
           <p class="muted small">
-            Supported params: <code>regionId</code>, <code>resourceId</code>, <code>center</code>, <code>zoom</code>.
+            This build is locked to <code>regionId=12</code>. Supported params: <code>resourceId</code>, <code>center</code>, <code>zoom</code>.
           </p>
           <div class="kv"><span>Requested regions</span><strong id="requestedRegions">—</strong></div>
           <div class="kv"><span>Requested resources</span><strong id="requestedResources">—</strong></div>
@@ -85,6 +85,7 @@
             <li>Public player search/details come from <code>/api/players</code> on <code>bitcraftmap.com</code>.</li>
             <li>Region resource GeoJSON comes from <code>https://bcmap-api.bitjita.com/region{n}/resource/{id}</code>.</li>
             <li>That resource API is CORS-locked to <code>bitcraftmap.com</code>, so this hosted app uses local cached snapshots for example resources.</li>
+            <li>This hosted build is intentionally cropped and locked to region 12 only.</li>
           </ul>
         </div>
       </aside>

@@ -1,4 +1,5 @@
 node_modules/
+tmp/
 smoke-test.png
 tmp-*.png
 tmp-*.json

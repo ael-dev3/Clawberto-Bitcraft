@@ -5,18 +5,21 @@ Deep research + working overlay software for Bitcraftmap.
 ## What this repo ships
 
 1. **Research findings** on the Bitcraftmap frontend/backend/API stack
-2. **A hosted static overlay app** that shows **Ael's live coordinates** on a Bitcraft-style map
+2. **A hosted static overlay app** that shows **Ael's live coordinates** on a **region-12-only** Bitcraft map
 3. **Region math** for Bitcraftmap regions
-4. **Cached resource snapshots** for query-driven overlays like:
-   - `?resourceId=1180909566&regionId=12`
-5. **GitHub Pages deployment** so the app can be hosted online from this repo
+4. **A cropped local terrain asset** for region 12, so the hosted app no longer loads the full-world map
+5. **Cached resource snapshots** for query-driven overlays like:
+   - `?resourceId=1180909566`
+6. **GitHub Pages deployment** so the app can be hosted online from this repo
 
 ## Hosted app
 
 After GitHub Pages deploys, use:
 
 - `https://ael-dev3.github.io/Clawberto-Bitcraft/`
-- example: `https://ael-dev3.github.io/Clawberto-Bitcraft/?resourceId=1180909566&regionId=12`
+- example: `https://ael-dev3.github.io/Clawberto-Bitcraft/?resourceId=1180909566`
+
+This hosted build is now hard-locked to **region 12**.
 
 ## Main result
 
@@ -179,26 +182,30 @@ Currently included:
 ## App behavior
 
 The hosted app:
-- renders the real Bitcraft terrain map from `https://bitcraftmap.com/assets/maps/map.webp`
+- renders a **cropped local region-12 terrain asset** at `assets/terrain/region12.png`
+- does **not** load the full-world Bitcraft terrain map anymore
+- hard-locks the viewport to **region 12**
 - connects to `wss://live.bitjita.com`
 - subscribes to Ael's mobile entity channel
 - converts `location_x` / `location_z` into map coordinates
 - draws a live Ael marker
-- highlights requested `regionId`
-- loads cached resource snapshot points when available
-- supports manual pin drop for any custom `X/Z`
+- loads cached region-12 resource snapshot points when available
+- supports manual pin drop for custom `X/Z` values **inside region 12 only**
 
 ## Query params supported by this app
 
-- `regionId=12`
 - `resourceId=1180909566`
-- `center=9342.399,16389.730`
+- `center=9342.399,16389.730` (only if inside region 12)
 - `zoom=1.2`
+
+Notes:
+- `regionId` is no longer needed; this build is fixed to region 12.
+- centers outside region 12 are ignored.
 
 Example:
 
 ```text
-/?resourceId=1180909566&regionId=12
+/?resourceId=1180909566
 ```
 
 ## Repo structure
@@ -206,6 +213,7 @@ Example:
 - `index.html` — hosted app shell
 - `app.js` — map, websocket, overlay logic
 - `style.css` — UI styling
+- `assets/terrain/region12.png` — cropped region-12 terrain asset
 - `data/resources/12/1180909566.json` — cached resource snapshot
 - `research/findings.md` — detailed research notes
 - `scripts/query-ael-live.mjs` — CLI to inspect live Ael websocket data
@@ -255,12 +263,14 @@ What I built to stop that drift:
   - cache status
   - marker readiness
   - current zoom
+- the hosted build now uses a **cropped local region-12 terrain asset** instead of loading the full-world map
+- the viewport is hard-locked to **region 12**
 - scheduled GitHub Pages deploy refreshes the runtime Ael cache every **15 minutes**
 - smoke-test workflow runs browser simulations on push and hourly against:
   - local build
   - hosted Pages site
 - smoke test asserts:
-  - terrain image loaded
+  - the **region12.png** terrain asset loaded
   - marker rendered
   - coordinates present
   - region label present

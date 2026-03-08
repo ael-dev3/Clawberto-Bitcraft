@@ -41,6 +41,7 @@ await page.screenshot({ path: 'smoke-test.png', fullPage: true });
 await browser.close();
 
 if (!state.terrainLoaded) throw new Error(`Terrain image not loaded: ${JSON.stringify(state)}`);
+if (!/region12\.png$/i.test(state.terrainSrc || '')) throw new Error(`Unexpected terrain asset: ${JSON.stringify(state)}`);
 if (!state.regionLabels) throw new Error(`Region label missing: ${JSON.stringify(state)}`);
 if (state.markers < 1) throw new Error(`No marker rendered: ${JSON.stringify(state)}`);
 if (!state.mapSize || state.mapSize.width < 500 || state.mapSize.height < 400) throw new Error(`Map container size invalid: ${JSON.stringify(state)}`);
