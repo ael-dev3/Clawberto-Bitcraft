@@ -402,7 +402,7 @@ function buildJitteredPositions(players) {
   const out = new Map();
   for (const group of groups.values()) {
     group.sort((a, b) => a.username.localeCompare(b.username));
-    const radius = 180; // world units, intentionally wide so labels are actually readable
+    const radius = Math.max(180, 34 * group.length); // widen crowded groups so labels are actually readable
     for (let i = 0; i < group.length; i++) {
       const p = group[i];
       if (group.length === 1) {
