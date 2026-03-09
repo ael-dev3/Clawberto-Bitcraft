@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { DEFAULT_PLAYER } from '../src/config';
-import { isFiniteNumber, regionIdFromCoord } from '../src/shared/bitcraft';
+import { isFiniteNumber, isInsideFixedRegion, regionIdFromCoord } from '../src/shared/bitcraft';
 import { parseLiveStateMessage } from '../src/shared/live-state';
 import {
   type PlayerDetailResponse,
@@ -69,6 +69,10 @@ await new Promise<void>((resolve) => {
 
     const liveSnapshot = parseLiveStateMessage(parsed, 'Tracked player runtime websocket payload');
     if (!liveSnapshot?.entityId || !isFiniteNumber(liveSnapshot.x) || !isFiniteNumber(liveSnapshot.z)) {
+      return;
+    }
+
+    if (!isInsideFixedRegion({ x: liveSnapshot.x, z: liveSnapshot.z })) {
       return;
     }
 

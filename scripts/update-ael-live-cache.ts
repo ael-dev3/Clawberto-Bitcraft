@@ -1,14 +1,16 @@
 import path from 'node:path';
 
 import { DEFAULT_PLAYER } from '../src/config';
-import { isFiniteNumber, regionIdFromCoord } from '../src/shared/bitcraft';
-import { parseLiveStateMessage } from '../src/shared/live-state';
+import { isFiniteNumber, isInsideFixedRegion, regionIdFromCoord } from '../src/shared/bitcraft';
+import { parseLiveStateMessage, type LiveStateSnapshot } from '../src/shared/live-state';
 import {
   aelRuntimeCacheSchema,
   playerDetailResponseSchema,
   type AelRuntimeCache,
   type PlayerDetailResponse,
 } from '../src/shared/schemas';
+import { decideLiveUpdateTrust, type PendingLiveCandidate } from '../src/app/live-trust';
+import type { PlayerRecord } from '../src/app/types';
 import { fetchJsonWithSchema, readJsonFileIfExists, writeJsonFile } from './lib/node-helpers';
 
 const entityId = process.argv[2] || DEFAULT_PLAYER.entityId;
@@ -21,7 +23,8 @@ const detailResponse = await fetchJsonWithSchema(detailUrl, playerDetailResponse
 const detailBaseline = extractDetailBaseline(detailResponse);
 
 const ws = new WebSocket('wss://live.bitjita.com');
-let latestLiveSnapshot: ReturnType<typeof parseLiveStateMessage> = null;
+let latestLiveSnapshot: LiveStateSnapshot | null = null;
+let pendingCandidate: PendingLiveCandidate | null = null;
 let settled = false;
 
 const finish = async (reason: string) => {
@@ -92,6 +95,21 @@ ws.addEventListener('message', (event) => {
     return;
   }
 
+  if (!isInsideFixedRegion({ x: liveSnapshot.x, z: liveSnapshot.z })) {
+    return;
+  }
+
+  const trustDecision = decideLiveUpdateTrust(
+    entityId,
+    toPlayerRecord(latestLiveSnapshot) ?? toPlayerRecord(detailBaseline) ?? toPlayerRecord(previous),
+    liveSnapshot,
+    pendingCandidate,
+  );
+  pendingCandidate = trustDecision.nextPending;
+  if (!trustDecision.accept) {
+    return;
+  }
+
   latestLiveSnapshot = liveSnapshot;
 });
 
@@ -106,6 +124,30 @@ ws.addEventListener('close', async () => {
 setTimeout(async () => {
   await finish('timeout');
 }, 15_000);
+
+function toPlayerRecord(snapshot: LiveStateSnapshot | AelRuntimeCache | null): PlayerRecord | null {
+  if (!snapshot || !isFiniteNumber(snapshot.x) || !isFiniteNumber(snapshot.z)) {
+    return null;
+  }
+
+  const source = 'source' in snapshot ? snapshot.source ?? 'unknown' : 'live';
+  const signedIn = 'signedIn' in snapshot ? snapshot.signedIn ?? true : true;
+  const lastLoginTimestamp = 'lastLoginTimestamp' in snapshot ? snapshot.lastLoginTimestamp ?? null : null;
+
+  return {
+    username,
+    entityId,
+    x: snapshot.x,
+    z: snapshot.z,
+    regionId: snapshot.regionId ?? regionIdFromCoord(snapshot.x, snapshot.z),
+    timestamp: snapshot.timestamp ?? null,
+    source,
+    signedIn,
+    lastLoginTimestamp,
+    destinationX: snapshot.destinationX ?? null,
+    destinationZ: snapshot.destinationZ ?? null,
+  };
+}
 
 function extractDetailBaseline(detail: PlayerDetailResponse | null): AelRuntimeCache | null {
   const player = detail?.player;

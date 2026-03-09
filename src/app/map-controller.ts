@@ -1,14 +1,10 @@
 import { APOTHEM, FIXED_REGION_ID, MAP_SIZE } from '../config';
 import { fixedRegionBounds, isInsideFixedRegion, regionIdFromCoord, type WorldPoint } from '../shared/bitcraft';
 import { escapeHtml } from '../shared/strings';
+import { buildReactiveLabelPositions, estimateLabelWidth, getLabelLayout } from './label-layout';
 import type { RenderablePlayer } from './types';
 
 declare const L: any;
-
-interface LabelPosition {
-  dx: number;
-  dy: number;
-}
 
 export class MapController {
   private readonly regionBounds: [[number, number], [number, number]] = [
@@ -74,11 +70,15 @@ export class MapController {
     this.playerDotLayer.addTo(this.map);
     this.playerLabelLayer.addTo(this.map);
 
-    this.map.on('zoomend', () => {
+    const rerenderLabels = () => {
       if (this.lastRenderablePlayers.length > 0) {
         this.renderPlayers(this.lastRenderablePlayers);
       }
-    });
+    };
+
+    this.map.on('zoomend', rerenderLabels);
+    this.map.on('moveend', rerenderLabels);
+    this.map.on('resize', rerenderLabels);
   }
 
   applyInitialView(requestedCenter: WorldPoint | null, requestedZoom: number | null): void {
@@ -163,7 +163,13 @@ export class MapController {
     this.lastRenderablePlayers = [...players];
     const zoom = this.map.getZoom();
     const labelLayout = getLabelLayout(zoom);
-    const labelPositions = buildLabelPositions(players, labelLayout);
+    const viewportSize = this.map.getSize();
+    const labelPositions = buildReactiveLabelPositions(
+      players,
+      new Map(players.map((player) => [String(player.entityId), this.map.latLngToContainerPoint([player.z, player.x])])),
+      { width: viewportSize.x, height: viewportSize.y },
+      zoom,
+    );
     const seen = new Set<string>();
 
     for (const player of players) {
@@ -188,11 +194,12 @@ export class MapController {
       dotMarker.bindPopup(buildPopupHtml(player));
 
       const labelState = labelPositions.get(entityId) ?? { dx: 0, dy: -labelLayout.baseLift };
+      const labelWidth = estimateLabelWidth(player.username);
       const labelIcon = L.divIcon({
         className: 'friend-marker-label-icon',
-        iconSize: [240, 180],
-        iconAnchor: [120, 90],
-        html: `<div class="friend-marker-label-wrap" style="transform: translate(${labelState.dx}px, ${labelState.dy}px)"><div class="friend-marker-label">${escapeHtml(player.username)}</div></div>`,
+        iconSize: [260, 220],
+        iconAnchor: [130, 110],
+        html: `<div class="friend-marker-label-wrap" style="transform: translate(${labelState.dx}px, ${labelState.dy}px)"><div class="friend-marker-label" style="width:${labelWidth}px">${escapeHtml(player.username)}</div></div>`,
       });
 
       let labelMarker = this.playerLabelMarkers.get(entityId);
@@ -248,66 +255,3 @@ function buildPopupHtml(player: RenderablePlayer): string {
   return `${escapeHtml(player.username)}<br>X ${player.x.toFixed(3)}<br>Z ${player.z.toFixed(3)}<br>Region ${region}<br>Source ${escapeHtml(source)}`;
 }
 
-interface LabelLayout {
-  baseLift: number;
-  rowGap: number;
-  columnSpread: number;
-}
-
-function getLabelLayout(zoom: number): LabelLayout {
-  const clamped = Math.max(-2, Math.min(5, zoom));
-  const t = (clamped + 2) / 7;
-  const eased = 1 - (1 - t) ** 2;
-
-  return {
-    baseLift: lerp(58, 20, eased),
-    rowGap: lerp(28, 18, eased),
-    columnSpread: lerp(78, 34, eased),
-  };
-}
-
-function buildLabelPositions(players: RenderablePlayer[], layout: LabelLayout): Map<string, LabelPosition> {
-  const groups = new Map<string, RenderablePlayer[]>();
-
-  for (const player of players) {
-    const key = `${player.x.toFixed(3)}:${player.z.toFixed(3)}`;
-    const group = groups.get(key);
-    if (group) {
-      group.push(player);
-    } else {
-      groups.set(key, [player]);
-    }
-  }
-
-  const positions = new Map<string, LabelPosition>();
-  for (const group of groups.values()) {
-    group.sort((left, right) => left.username.localeCompare(right.username));
-
-    if (group.length === 1) {
-      const onlyPlayer = group[0];
-      if (!onlyPlayer) continue;
-      positions.set(String(onlyPlayer.entityId), { dx: 0, dy: -layout.baseLift });
-      continue;
-    }
-
-    const useTwoColumns = group.length >= 8;
-    const xOffsets = useTwoColumns ? [-layout.columnSpread, layout.columnSpread] : [0];
-
-    for (let index = 0; index < group.length; index += 1) {
-      const player = group[index];
-      if (!player) continue;
-      const column = useTwoColumns ? index % 2 : 0;
-      const row = useTwoColumns ? Math.floor(index / 2) : index;
-      positions.set(String(player.entityId), {
-        dx: xOffsets[column] ?? 0,
-        dy: -layout.baseLift - row * layout.rowGap,
-      });
-    }
-  }
-
-  return positions;
-}
-
-function lerp(start: number, end: number, t: number): number {
-  return start + (end - start) * t;
-}

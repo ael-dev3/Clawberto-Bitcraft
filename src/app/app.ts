@@ -33,6 +33,7 @@ import {
 import { formatMaybe } from '../shared/strings';
 import { getDom, type AppDom } from '../ui/dom';
 import { fetchJsonValidated } from './fetch-json';
+import { decideLiveUpdateTrust, type PendingLiveCandidate } from './live-trust';
 import { MapController } from './map-controller';
 import type { PlayerRecord, QueryState, RenderablePlayer } from './types';
 
@@ -69,6 +70,7 @@ class OverlayApp {
   private aelState: PlayerRecord | null = null;
   private runtimeCache: AelRuntimeCache | null = null;
   private terrainReady = false;
+  private readonly pendingLiveCandidates = new Map<string, PendingLiveCandidate>();
 
   constructor(
     private readonly dom: AppDom,
@@ -320,6 +322,26 @@ class OverlayApp {
       const livePoint = { x: liveState.x, z: liveState.z };
       if (!isInsideFixedRegion(livePoint)) {
         console.warn('Ignoring off-map live update for fixed region-12 build', liveState);
+        return;
+      }
+
+      const currentPlayer =
+        liveState.entityId === DEFAULT_PLAYER.entityId
+          ? this.aelState
+          : (this.trackedPlayers.get(liveState.entityId) ?? null);
+      const trustDecision = decideLiveUpdateTrust(
+        liveState.entityId,
+        currentPlayer,
+        liveState,
+        this.pendingLiveCandidates.get(liveState.entityId) ?? null,
+      );
+      if (trustDecision.nextPending) {
+        this.pendingLiveCandidates.set(liveState.entityId, trustDecision.nextPending);
+      } else {
+        this.pendingLiveCandidates.delete(liveState.entityId);
+      }
+      if (!trustDecision.accept) {
+        console.warn('Holding suspicious live update pending confirmation', liveState);
         return;
       }
 
