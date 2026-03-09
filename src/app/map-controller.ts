@@ -1,50 +1,61 @@
+import {
+  CRS,
+  Canvas,
+  DivIcon,
+  ImageOverlay,
+  LatLng,
+  LayerGroup,
+  Map as LeafletMap,
+  Point,
+  Transformation,
+  bounds,
+  circleMarker,
+  divIcon,
+  imageOverlay,
+  latLngBounds,
+  layerGroup,
+  map,
+  marker,
+  rectangle,
+  type CRS as LeafletCrs,
+  type DivIconOptions,
+  type Layer,
+  type LatLngBoundsExpression,
+  type PointExpression,
+} from 'leaflet';
+
 import { APOTHEM, FIXED_REGION_ID, MAP_SIZE } from '../config';
 import { fixedRegionBounds, isInsideFixedRegion, regionIdFromCoord, type WorldPoint } from '../shared/bitcraft';
 import { escapeHtml } from '../shared/strings';
 import { buildReactiveLabelPositions, estimateLabelWidth, getLabelLayout } from './label-layout';
 import type { RenderablePlayer } from './types';
 
-declare const L: any;
+type WorldLatLng = [z: number, x: number];
 
 export class MapController {
-  private readonly regionBounds: [[number, number], [number, number]] = [
+  private readonly regionBounds: LatLngBoundsExpression = [
     [fixedRegionBounds.zMin, fixedRegionBounds.xMin],
     [fixedRegionBounds.zMax, fixedRegionBounds.xMax],
   ];
 
-  private readonly map: any;
-  private readonly terrainLayer: any;
-  private readonly regionLayer = L.layerGroup();
-  private readonly resourceLayer = L.layerGroup();
-  private readonly markerLayer = L.layerGroup();
-  private readonly playerDotLayer = L.layerGroup();
-  private readonly playerLabelLayer = L.layerGroup();
-  private readonly resourceRenderer = L.canvas({ padding: 0.5 });
+  private readonly map: LeafletMap;
+  private readonly terrainLayer: ImageOverlay;
+  private readonly regionLayer: LayerGroup = layerGroup();
+  private readonly resourceLayer: LayerGroup = layerGroup();
+  private readonly markerLayer: LayerGroup = layerGroup();
+  private readonly playerDotLayer: LayerGroup = layerGroup();
+  private readonly playerLabelLayer: LayerGroup = layerGroup();
+  private readonly resourceRenderer: Canvas = new Canvas({ padding: 0.5 });
 
-  private manualMarker: any | null = null;
-  private readonly playerDotMarkers = new Map<string, any>();
-  private readonly playerLabelMarkers = new Map<string, any>();
+  private manualMarker: ReturnType<typeof marker> | null = null;
+  private readonly playerDotMarkers = new globalThis.Map<string, ReturnType<typeof marker>>();
+  private readonly playerLabelMarkers = new globalThis.Map<string, ReturnType<typeof marker>>();
   private lastRenderablePlayers: RenderablePlayer[] = [];
 
   constructor(private readonly terrainUrl: string) {
-    const crs = L.extend({}, L.CRS.Simple, {
-      projection: {
-        project(latlng: { lat: number; lng: number }) {
-          return new L.Point(latlng.lng, -latlng.lat / APOTHEM);
-        },
-        unproject(point: { x: number; y: number }) {
-          return new L.LatLng(-point.y * APOTHEM, point.x);
-        },
-        bounds: L.bounds([0, 0], [MAP_SIZE, MAP_SIZE]),
-      },
-      transformation: new L.Transformation(1, 0, 1, 0),
-      scale(zoom: number) {
-        return 2 ** zoom;
-      },
-      infinite: false,
-    });
+    const crs = this.createWorldCrs();
 
-    this.map = L.map('map', {
+    this.map = map('map', {
       crs,
       preferCanvas: true,
       zoomAnimation: false,
@@ -58,7 +69,7 @@ export class MapController {
       maxBoundsViscosity: 1,
     });
 
-    this.terrainLayer = L.imageOverlay(this.terrainUrl, this.regionBounds, {
+    this.terrainLayer = imageOverlay(this.terrainUrl, this.regionBounds, {
       crossOrigin: true,
       opacity: 1,
     });
@@ -83,7 +94,7 @@ export class MapController {
 
   applyInitialView(requestedCenter: WorldPoint | null, requestedZoom: number | null): void {
     if (requestedCenter && requestedZoom != null && isInsideFixedRegion(requestedCenter)) {
-      this.map.setView([requestedCenter.z, requestedCenter.x], requestedZoom);
+      this.map.setView(this.toLatLng(requestedCenter), requestedZoom);
       return;
     }
 
@@ -92,7 +103,7 @@ export class MapController {
 
   drawRegionFrame(): void {
     this.regionLayer.clearLayers();
-    const rect = L.rectangle(this.regionBounds, {
+    const rect = rectangle(this.regionBounds, {
       color: '#63d2ff',
       weight: 2,
       fillColor: '#63d2ff',
@@ -116,15 +127,15 @@ export class MapController {
   }
 
   recenter(point: WorldPoint, minZoom = 1.2): void {
-    this.map.setView([point.z, point.x], Math.max(this.map.getZoom(), minZoom), { animate: false });
+    this.map.setView(this.toLatLng(point), Math.max(this.map.getZoom(), minZoom), { animate: false });
   }
 
   setManualPin(point: WorldPoint): void {
     const popupHtml = `Manual pin<br>X ${point.x.toFixed(3)}<br>Z ${point.z.toFixed(3)}<br>Region ${regionIdFromCoord(point.x, point.z) ?? 'unknown'}`;
 
     if (!this.manualMarker) {
-      this.manualMarker = L.marker([point.z, point.x], {
-        icon: L.divIcon({
+      this.manualMarker = marker(this.toLatLng(point), {
+        icon: divIcon({
           className: 'manual-marker',
           iconSize: [16, 16],
           iconAnchor: [8, 8],
@@ -133,7 +144,7 @@ export class MapController {
       this.manualMarker.addTo(this.markerLayer);
     }
 
-    this.manualMarker.setLatLng([point.z, point.x]);
+    this.manualMarker.setLatLng(this.toLatLng(point));
     this.manualMarker.bindPopup(popupHtml);
   }
 
@@ -147,7 +158,7 @@ export class MapController {
     let renderedCount = 0;
     for (const point of points) {
       if (!isInsideFixedRegion(point)) continue;
-      L.circleMarker([point.z, point.x], {
+      circleMarker(this.toLatLng(point), {
         renderer: this.resourceRenderer,
         radius: 2.6,
         weight: 0,
@@ -166,7 +177,7 @@ export class MapController {
     const viewportSize = this.map.getSize();
     const labelPositions = buildReactiveLabelPositions(
       players,
-      new Map(players.map((player) => [String(player.entityId), this.map.latLngToContainerPoint([player.z, player.x])])),
+      new globalThis.Map(players.map((player) => [String(player.entityId), this.map.latLngToContainerPoint(this.toLatLng(player))])),
       { width: viewportSize.x, height: viewportSize.y },
       zoom,
     );
@@ -175,11 +186,12 @@ export class MapController {
     for (const player of players) {
       const entityId = String(player.entityId);
       seen.add(entityId);
+      const playerLatLng = this.toLatLng(player);
 
       let dotMarker = this.playerDotMarkers.get(entityId);
       if (!dotMarker) {
-        dotMarker = L.marker([player.z, player.x], {
-          icon: L.divIcon({
+        dotMarker = marker(playerLatLng, {
+          icon: this.createDivIcon({
             className: '',
             iconSize: [24, 24],
             iconAnchor: [12, 12],
@@ -190,12 +202,12 @@ export class MapController {
         dotMarker.addTo(this.playerDotLayer);
       }
 
-      dotMarker.setLatLng([player.z, player.x]);
+      dotMarker.setLatLng(playerLatLng);
       dotMarker.bindPopup(buildPopupHtml(player));
 
       const labelState = labelPositions.get(entityId) ?? { dx: 0, dy: -labelLayout.baseLift };
       const labelWidth = estimateLabelWidth(player.username);
-      const labelIcon = L.divIcon({
+      const labelIcon = this.createDivIcon({
         className: 'friend-marker-label-icon',
         iconSize: [260, 220],
         iconAnchor: [130, 110],
@@ -204,7 +216,7 @@ export class MapController {
 
       let labelMarker = this.playerLabelMarkers.get(entityId);
       if (!labelMarker) {
-        labelMarker = L.marker([player.z, player.x], {
+        labelMarker = marker(playerLatLng, {
           interactive: true,
           keyboard: true,
           zIndexOffset: 1000,
@@ -214,38 +226,65 @@ export class MapController {
         labelMarker.addTo(this.playerLabelLayer);
       }
 
-      labelMarker.setLatLng([player.z, player.x]);
+      labelMarker.setLatLng(playerLatLng);
       labelMarker.setIcon(labelIcon);
       labelMarker.bindPopup(buildPopupHtml(player));
     }
 
-    for (const [entityId, marker] of this.playerDotMarkers.entries()) {
-      if (seen.has(entityId)) continue;
-      this.playerDotLayer.removeLayer(marker);
-      this.playerDotMarkers.delete(entityId);
-    }
-
-    for (const [entityId, marker] of this.playerLabelMarkers.entries()) {
-      if (seen.has(entityId)) continue;
-      this.playerLabelLayer.removeLayer(marker);
-      this.playerLabelMarkers.delete(entityId);
-    }
+    this.pruneRemovedMarkers(this.playerDotMarkers, this.playerDotLayer, seen);
+    this.pruneRemovedMarkers(this.playerLabelMarkers, this.playerLabelLayer, seen);
   }
 
   fitToPlayers(players: RenderablePlayer[]): void {
-    const points = players.map((player) => [player.z, player.x] as [number, number]);
+    const points = players.map((player) => this.toLatLng(player));
     if (points.length >= 2) {
-      this.map.fitBounds(L.latLngBounds(points), { padding: [80, 80], maxZoom: 1.2 });
+      this.map.fitBounds(latLngBounds(points), { padding: [80, 80], maxZoom: 1.2 });
       return;
     }
 
-    if (points.length === 1) {
+    if (points.length === 1 && points[0]) {
       this.map.setView(points[0], 1.2);
     }
   }
 
   getZoom(): number {
     return this.map.getZoom();
+  }
+
+  private createWorldCrs(): LeafletCrs {
+    return Object.assign({}, CRS.Simple, {
+      projection: {
+        project(latlng: LatLng): Point {
+          return new Point(latlng.lng, -latlng.lat / APOTHEM);
+        },
+        unproject(point: PointExpression): LatLng {
+          const { x, y } = point instanceof Point ? point : new Point(point[0], point[1]);
+          return new LatLng(-y * APOTHEM, x);
+        },
+        bounds: bounds([0, 0], [MAP_SIZE, MAP_SIZE]),
+      },
+      transformation: new Transformation(1, 0, 1, 0),
+      scale(zoom: number): number {
+        return 2 ** zoom;
+      },
+      infinite: false,
+    }) as LeafletCrs;
+  }
+
+  private createDivIcon(options: DivIconOptions): DivIcon {
+    return divIcon(options);
+  }
+
+  private toLatLng(point: WorldPoint): WorldLatLng {
+    return [point.z, point.x];
+  }
+
+  private pruneRemovedMarkers(markers: globalThis.Map<string, ReturnType<typeof marker>>, layer: LayerGroup, seen: Set<string>): void {
+    for (const [entityId, instance] of markers.entries()) {
+      if (seen.has(entityId)) continue;
+      layer.removeLayer(instance as Layer);
+      markers.delete(entityId);
+    }
   }
 }
 
@@ -254,4 +293,3 @@ function buildPopupHtml(player: RenderablePlayer): string {
   const region = player.regionId ?? 'unknown';
   return `${escapeHtml(player.username)}<br>X ${player.x.toFixed(3)}<br>Z ${player.z.toFixed(3)}<br>Region ${region}<br>Source ${escapeHtml(source)}`;
 }
-
