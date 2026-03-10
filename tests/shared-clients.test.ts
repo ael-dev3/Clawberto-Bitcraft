@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   PLAYER_DETAIL_LOCATION_SOURCE,
@@ -7,8 +7,13 @@ import {
 } from '../src/shared/bitcraft';
 import { subscribeMobileEntityState } from '../src/shared/clients/live';
 import { normalizePlayerDetailState } from '../src/shared/clients/player-detail';
+import { fetchResourceSnapshot } from '../src/shared/clients/resource';
 
 describe('shared clients', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('subscribes sockets to mobile entity state channels', () => {
     const sent: string[] = [];
     subscribeMobileEntityState(
@@ -78,5 +83,43 @@ describe('shared clients', () => {
       signedIn: false,
       lastLoginTimestamp: null,
     });
+  });
+
+  it('fetches resource snapshots through the shared client', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            type: 'FeatureCollection',
+            features: [
+              {
+                type: 'Feature',
+                geometry: {
+                  type: 'MultiPoint',
+                  coordinates: [[10, 20]],
+                },
+              },
+            ],
+          }),
+      }),
+    );
+
+    const snapshot = await fetchResourceSnapshot(12, 1180909566);
+
+    expect(snapshot).toEqual({
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          geometry: {
+            type: 'MultiPoint',
+            coordinates: [[10, 20]],
+          },
+        },
+      ],
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
