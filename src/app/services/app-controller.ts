@@ -6,7 +6,7 @@ import { MapController } from '../map-controller';
 import { PlayerStore } from '../store/player-store';
 import type { QueryState } from '../types';
 import { AppPresenter } from './app-presenter';
-import { LiveFeedService } from './live-feed-service';
+import { LiveFeedService, type LiveFeedConnection } from './live-feed-service';
 import { RuntimeCacheService } from './runtime-cache-service';
 
 export interface AppControllerOptions {
@@ -23,6 +23,8 @@ export class AppController {
 
   private runtimeCache: AelRuntimeCache | null = null;
   private terrainReady = false;
+  private runtimePollingAbortController: AbortController | null = null;
+  private liveFeedConnection: LiveFeedConnection | null = null;
 
   constructor(
     private readonly options: AppControllerOptions,
@@ -49,6 +51,14 @@ export class AppController {
 
   handleBootError(error: unknown): void {
     this.presenter.handleBootError(error);
+  }
+
+  dispose(): void {
+    this.runtimePollingAbortController?.abort();
+    this.runtimePollingAbortController = null;
+
+    this.liveFeedConnection?.dispose();
+    this.liveFeedConnection = null;
   }
 
   private setupButtons(): void {
@@ -149,16 +159,18 @@ export class AppController {
   }
 
   private startRuntimePolling(): void {
-    window.setInterval(() => {
-      void this.refreshAelFromRuntimeCache();
-      void this.refreshTrackedPlayersFromRuntimeCache();
-    }, RUNTIME_CACHE_REFRESH_MS);
+    this.runtimePollingAbortController?.abort();
+
+    const abortController = new AbortController();
+    this.runtimePollingAbortController = abortController;
+    void this.runRuntimePollingLoop(abortController.signal);
   }
 
   private connectLiveFeeds(): void {
     this.presenter.setStatus(this.runtimeCache ? 'Waiting for live feed' : 'Connecting to live feed');
 
-    this.liveFeedService.connect([DEFAULT_PLAYER.entityId, ...this.playerStore.getTrackedPlayerEntityIds()], {
+    this.liveFeedConnection?.dispose();
+    this.liveFeedConnection = this.liveFeedService.connect([DEFAULT_PLAYER.entityId, ...this.playerStore.getTrackedPlayerEntityIds()], {
       onOpen: () => {
         this.presenter.setStatus(this.runtimeCache ? 'Subscribed · waiting live' : 'Subscribed');
         this.refreshDiagnostics();
@@ -196,6 +208,17 @@ export class AppController {
         this.refreshDiagnostics();
       },
     });
+  }
+
+  private async runRuntimePollingLoop(signal: AbortSignal): Promise<void> {
+    while (!signal.aborted) {
+      await waitForAbortableDelay(RUNTIME_CACHE_REFRESH_MS, signal);
+      if (signal.aborted) {
+        return;
+      }
+
+      await Promise.all([this.refreshAelFromRuntimeCache(), this.refreshTrackedPlayersFromRuntimeCache()]);
+    }
   }
 
   private async refreshAelFromRuntimeCache(): Promise<void> {
@@ -268,4 +291,30 @@ export class AppController {
       zoom: this.options.mapController.getZoom(),
     });
   }
+}
+
+function waitForAbortableDelay(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+
+    const onAbort = () => {
+      cleanup();
+      resolve();
+    };
+
+    const cleanup = () => {
+      window.clearTimeout(timeoutId);
+      signal.removeEventListener('abort', onAbort);
+    };
+
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
 }

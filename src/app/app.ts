@@ -11,10 +11,17 @@ export async function bootApp(): Promise<void> {
     mapController: new MapController(resolvePublicUrl(TERRAIN_PATH)),
     queryState: readQueryState(),
   });
+  const disposeController = () => {
+    controller.dispose();
+  };
+
+  window.addEventListener('pagehide', disposeController, { once: true });
+  window.addEventListener('beforeunload', disposeController, { once: true });
 
   try {
     await controller.boot();
   } catch (error) {
+    controller.dispose();
     console.error(error);
     controller.handleBootError(error);
   }
