@@ -239,6 +239,22 @@ input[type="number"] {
   font-weight: 700;
 }
 
+.tracked-player-state {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(120, 215, 255, 0.12);
+  color: var(--accent);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.tracked-player-state.off-map {
+  background: rgba(255, 176, 166, 0.12);
+  color: var(--danger);
+}
+
 .tracked-player-meta {
   line-height: 1.45;
   font-size: 12px;

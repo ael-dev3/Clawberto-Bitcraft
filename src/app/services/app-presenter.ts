@@ -17,7 +17,30 @@ export interface ResourceRenderSummary {
   count: number;
 }
 
+interface TrackedPlayerViewState {
+  entityId: string;
+  username: string;
+  onMap: boolean;
+  statusText: string;
+  coordLine: string;
+  sourceLine: string;
+  signedInLine: string;
+  signature: string;
+}
+
+interface TrackedPlayerCardRefs {
+  root: HTMLDivElement;
+  name: HTMLSpanElement;
+  status: HTMLSpanElement;
+  coordLine: HTMLDivElement;
+  sourceLine: HTMLDivElement;
+  signedInLine: HTMLDivElement;
+  signature: string;
+}
+
 export class AppPresenter {
+  private readonly trackedPlayerCards = new Map<string, TrackedPlayerCardRefs>();
+
   constructor(private readonly dom: AppDom) {}
 
   initializeStaticUi(queryState: QueryState): void {
@@ -113,36 +136,31 @@ export class AppPresenter {
 
   renderTrackedPlayers(players: PlayerRecord[]): void {
     const rows = [...players].sort((left, right) => left.username.localeCompare(right.username));
-    this.dom.trackedPlayersList.replaceChildren();
+    const seen = new Set<string>();
+    let cursor = this.dom.trackedPlayersList.firstElementChild as HTMLElement | null;
 
     for (const player of rows) {
-      const point = isFiniteNumber(player.x) && isFiniteNumber(player.z) ? { x: player.x, z: player.z } : null;
-      const region = point ? player.regionId ?? regionIdFromCoord(point.x, point.z) : player.regionId;
-      const onMap = point != null && isInsideFixedRegion(point) && region === FIXED_REGION_ID;
+      const view = buildTrackedPlayerViewState(player);
+      const card = this.upsertTrackedPlayerCard(view);
+      seen.add(view.entityId);
 
-      const card = document.createElement('div');
-      card.className = 'tracked-player';
+      if (card.root !== cursor) {
+        this.dom.trackedPlayersList.insertBefore(card.root, cursor);
+      } else {
+        cursor = cursor?.nextElementSibling as HTMLElement | null;
+        continue;
+      }
 
-      const head = document.createElement('div');
-      head.className = 'tracked-player-head';
+      cursor = card.root.nextElementSibling as HTMLElement | null;
+    }
 
-      const name = document.createElement('span');
-      name.textContent = player.username;
-      const status = document.createElement('span');
-      status.textContent = onMap ? 'on map' : 'off map';
-      head.append(name, status);
+    for (const [entityId, card] of this.trackedPlayerCards.entries()) {
+      if (seen.has(entityId)) {
+        continue;
+      }
 
-      const meta = document.createElement('div');
-      meta.className = 'tracked-player-meta';
-      appendLine(meta, `X ${formatMaybe(player.x)} · Z ${formatMaybe(player.z)}`);
-      appendLine(meta, `region ${region ?? '-'} · source ${player.source ?? 'unknown'}`);
-      appendLine(
-        meta,
-        `signed in ${player.signedIn === true ? 'yes' : player.signedIn === false ? 'no' : 'unknown'}`,
-      );
-
-      card.append(head, meta);
-      this.dom.trackedPlayersList.appendChild(card);
+      card.root.remove();
+      this.trackedPlayerCards.delete(entityId);
     }
   }
 
@@ -158,14 +176,81 @@ export class AppPresenter {
     this.dom.diagnosticsStatus.textContent = `Diagnostics: ${parts.join(' · ')}`;
     this.dom.diagnosticsStatus.className = state.aelKnown || state.terrainReady ? 'notice' : 'notice warn';
   }
+
+  private upsertTrackedPlayerCard(view: TrackedPlayerViewState): TrackedPlayerCardRefs {
+    let card = this.trackedPlayerCards.get(view.entityId);
+    if (!card) {
+      card = createTrackedPlayerCard(view.entityId);
+      this.trackedPlayerCards.set(view.entityId, card);
+    }
+
+    if (card.signature === view.signature) {
+      return card;
+    }
+
+    card.name.textContent = view.username;
+    card.status.textContent = view.statusText;
+    card.status.className = view.onMap ? 'tracked-player-state' : 'tracked-player-state off-map';
+    card.coordLine.textContent = view.coordLine;
+    card.sourceLine.textContent = view.sourceLine;
+    card.signedInLine.textContent = view.signedInLine;
+    card.signature = view.signature;
+    return card;
+  }
 }
 
-function appendLine(parent: HTMLElement, text: string): void {
-  if (parent.childNodes.length > 0) {
-    parent.appendChild(document.createElement('br'));
-  }
+function buildTrackedPlayerViewState(player: PlayerRecord): TrackedPlayerViewState {
+  const point = isFiniteNumber(player.x) && isFiniteNumber(player.z) ? { x: player.x, z: player.z } : null;
+  const region = point ? player.regionId ?? regionIdFromCoord(point.x, point.z) : player.regionId;
+  const onMap = point != null && isInsideFixedRegion(point) && region === FIXED_REGION_ID;
+  const statusText = onMap ? 'on map' : 'off map';
+  const coordLine = `X ${formatMaybe(player.x)} · Z ${formatMaybe(player.z)}`;
+  const sourceLine = `region ${region ?? '-'} · source ${player.source ?? 'unknown'}`;
+  const signedInLine = `signed in ${player.signedIn === true ? 'yes' : player.signedIn === false ? 'no' : 'unknown'}`;
 
-  parent.appendChild(document.createTextNode(text));
+  return {
+    entityId: player.entityId,
+    username: player.username,
+    onMap,
+    statusText,
+    coordLine,
+    sourceLine,
+    signedInLine,
+    signature: [player.username, statusText, coordLine, sourceLine, signedInLine].join('|'),
+  };
+}
+
+function createTrackedPlayerCard(entityId: string): TrackedPlayerCardRefs {
+  const root = document.createElement('div');
+  root.className = 'tracked-player';
+  root.dataset.entityId = entityId;
+
+  const head = document.createElement('div');
+  head.className = 'tracked-player-head';
+
+  const name = document.createElement('span');
+  const status = document.createElement('span');
+  head.append(name, status);
+
+  const meta = document.createElement('div');
+  meta.className = 'tracked-player-meta';
+
+  const coordLine = document.createElement('div');
+  const sourceLine = document.createElement('div');
+  const signedInLine = document.createElement('div');
+  meta.append(coordLine, sourceLine, signedInLine);
+
+  root.append(head, meta);
+
+  return {
+    root,
+    name,
+    status,
+    coordLine,
+    sourceLine,
+    signedInLine,
+    signature: '',
+  };
 }
 
 function getErrorMessage(error: unknown): string {

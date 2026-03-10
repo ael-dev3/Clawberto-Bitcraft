@@ -73,7 +73,7 @@ export class PlayerStore {
         continue;
       }
 
-      this.updateTrackedPlayer(entityId, {
+      changed = this.updateTrackedPlayer(entityId, {
         x: row.x ?? current.x,
         z: row.z ?? current.z,
         regionId: row.regionId ?? current.regionId,
@@ -83,8 +83,7 @@ export class PlayerStore {
         lastLoginTimestamp: row.lastLoginTimestamp ?? current.lastLoginTimestamp,
         destinationX: row.destinationX ?? current.destinationX ?? null,
         destinationZ: row.destinationZ ?? current.destinationZ ?? null,
-      });
-      changed = true;
+      }) || changed;
     }
 
     return changed;
@@ -212,16 +211,22 @@ export class PlayerStore {
     };
   }
 
-  private updateTrackedPlayer(entityId: string, patch: Partial<PlayerRecord>): void {
+  private updateTrackedPlayer(entityId: string, patch: Partial<PlayerRecord>): boolean {
     const previous = this.trackedPlayers.get(entityId) ?? this.createFallbackPlayer(entityId);
-
-    this.trackedPlayers.set(entityId, {
+    const next: PlayerRecord = {
       ...previous,
       ...patch,
       entityId,
       username: patch.username ?? previous.username,
       source: patch.source ?? previous.source,
-    });
+    };
+
+    if (playerRecordEquals(previous, next)) {
+      return false;
+    }
+
+    this.trackedPlayers.set(entityId, next);
+    return true;
   }
 
   private setAelPosition(next: AelPositionUpdate): void {
@@ -285,4 +290,20 @@ export class PlayerStore {
       destinationZ: null,
     };
   }
+}
+
+function playerRecordEquals(left: PlayerRecord, right: PlayerRecord): boolean {
+  return (
+    left.username === right.username &&
+    left.entityId === right.entityId &&
+    left.x === right.x &&
+    left.z === right.z &&
+    left.regionId === right.regionId &&
+    left.timestamp === right.timestamp &&
+    left.source === right.source &&
+    left.signedIn === right.signedIn &&
+    left.lastLoginTimestamp === right.lastLoginTimestamp &&
+    (left.destinationX ?? null) === (right.destinationX ?? null) &&
+    (left.destinationZ ?? null) === (right.destinationZ ?? null)
+  );
 }
