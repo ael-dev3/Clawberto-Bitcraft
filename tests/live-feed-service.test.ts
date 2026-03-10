@@ -40,6 +40,36 @@ describe('live feed service', () => {
     expect(sockets.created).toHaveLength(3);
   });
 
+  it('adds jitter to reconnect delays and still caps at the configured maximum', () => {
+    vi.useFakeTimers();
+
+    const sockets = createSocketFactory();
+    const service = new LiveFeedService({
+      socketFactory: sockets.factory,
+      random: () => 1,
+      reconnectBaseDelayMs: 1_000,
+      reconnectMaxDelayMs: 2_500,
+      reconnectJitterRatio: 0.5,
+      staleTimeoutMs: 60_000,
+    });
+
+    service.connect(['648518346354069088'], createHandlers());
+
+    getCreatedSocket(sockets.created, 0).emitClose();
+    vi.advanceTimersByTime(1_499);
+    expect(sockets.created).toHaveLength(1);
+
+    vi.advanceTimersByTime(1);
+    expect(sockets.created).toHaveLength(2);
+
+    getCreatedSocket(sockets.created, 1).emitClose();
+    vi.advanceTimersByTime(2_499);
+    expect(sockets.created).toHaveLength(2);
+
+    vi.advanceTimersByTime(1);
+    expect(sockets.created).toHaveLength(3);
+  });
+
   it('resubscribes after reconnecting and forwards live updates', () => {
     vi.useFakeTimers();
 
@@ -131,6 +161,28 @@ describe('live feed service', () => {
     expect(handlers.onClose).toHaveBeenCalledTimes(1);
 
     vi.advanceTimersByTime(60_000);
+    expect(sockets.created).toHaveLength(2);
+  });
+
+  it('does not stack reconnect timers when the same socket closes repeatedly', () => {
+    vi.useFakeTimers();
+
+    const sockets = createSocketFactory();
+    const service = new LiveFeedService({
+      socketFactory: sockets.factory,
+      reconnectBaseDelayMs: 1_000,
+      reconnectMaxDelayMs: 30_000,
+      reconnectJitterRatio: 0,
+      staleTimeoutMs: 60_000,
+    });
+
+    service.connect(['648518346354069088'], createHandlers());
+
+    const socket = getCreatedSocket(sockets.created, 0);
+    socket.emitClose();
+    socket.emitClose();
+
+    vi.advanceTimersByTime(1_000);
     expect(sockets.created).toHaveLength(2);
   });
 });
