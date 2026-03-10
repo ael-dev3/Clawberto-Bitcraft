@@ -25,41 +25,6 @@ export async function writeJsonFile(filePath: string, payload: unknown): Promise
   await fs.writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`);
 }
 
-export async function fetchJsonWithSchema<T>(
-  url: string,
-  schema: ZodType<T>,
-  label: string,
-  init?: RequestInit,
-): Promise<T | null> {
-  try {
-    const response = await fetch(url, init);
-    const text = await response.text();
-
-    if (!response.ok) {
-      console.warn(`${label} request failed with ${response.status}`);
-      return null;
-    }
-
-    if (!text.trim()) {
-      console.warn(`${label} returned an empty response`);
-      return null;
-    }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(text) as unknown;
-    } catch (error) {
-      console.warn(`${label} returned invalid JSON`, error);
-      return null;
-    }
-
-    return validateWithSchema(parsed, schema, label);
-  } catch (error) {
-    console.warn(`${label} request failed`, error);
-    return null;
-  }
-}
-
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return typeof error === 'object' && error != null && 'code' in error;
 }

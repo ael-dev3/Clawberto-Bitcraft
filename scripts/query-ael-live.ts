@@ -1,12 +1,15 @@
+import { buildMobileEntityStateChannel } from '../src/shared/bitcraft';
+import { createBitcraftLiveSocket, subscribeMobileEntityState } from '../src/shared/clients/live';
 import { parseLiveStateMessage } from '../src/shared/live-state';
 
 const entityId = process.argv[2] || '648518346354069088';
-const ws = new WebSocket('wss://live.bitjita.com');
+const ws = createBitcraftLiveSocket();
+const channel = buildMobileEntityStateChannel(entityId);
 
-console.log(`subscribing to mobile_entity_state:${entityId}`);
+console.log(`subscribing to ${channel}`);
 
 ws.addEventListener('open', () => {
-  ws.send(JSON.stringify({ type: 'subscribe', channels: [`mobile_entity_state:${entityId}`] }));
+  subscribeMobileEntityState(ws, [entityId]);
 });
 
 ws.addEventListener('message', (event) => {

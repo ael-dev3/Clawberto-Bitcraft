@@ -1,5 +1,6 @@
 import path from 'node:path';
 
+import { BITCRAFT_WEB_ORIGIN, buildResourceSnapshotUrl } from '../src/shared/bitcraft';
 import { resourceSnapshotSchema } from '../src/shared/schemas';
 import { validateWithSchema } from '../src/shared/validation';
 import { writeJsonFile } from './lib/node-helpers';
@@ -12,11 +13,11 @@ if (!regionId || !resourceId) {
   process.exit(1);
 }
 
-const url = `https://bcmap-api.bitjita.com/region${regionId}/resource/${resourceId}`;
+const url = buildResourceSnapshotUrl(regionId, resourceId);
 const response = await fetch(url, {
   headers: {
-    Origin: 'https://bitcraftmap.com',
-    Referer: 'https://bitcraftmap.com/',
+    Origin: BITCRAFT_WEB_ORIGIN,
+    Referer: `${BITCRAFT_WEB_ORIGIN}/`,
     'User-Agent': 'Mozilla/5.0',
   },
 });

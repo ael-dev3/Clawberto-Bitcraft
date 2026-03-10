@@ -1,5 +1,5 @@
 import { TERRAIN_PATH } from '../config';
-import { parseCenter, parseIdList, parseRequestedZoom, resolvePublicUrl } from '../shared/bitcraft';
+import { parseBitcraftQuery, resolvePublicUrl } from '../shared/bitcraft';
 import { getDom } from '../ui/dom';
 import { MapController } from './map-controller';
 import { AppController } from './services/app-controller';
@@ -21,10 +21,5 @@ export async function bootApp(): Promise<void> {
 }
 
 function readQueryState(): QueryState {
-  const params = new URLSearchParams(window.location.search);
-  return {
-    requestedResourceIds: parseIdList(params.get('resourceId')),
-    requestedCenter: parseCenter(params.get('center')),
-    requestedZoom: parseRequestedZoom(params.get('zoom')),
-  };
+  return parseBitcraftQuery(window.location.search);
 }

@@ -1,3 +1,8 @@
+import {
+  BITCRAFT_LIVE_SOURCE,
+  PLAYER_DETAIL_LOCATION_SOURCE,
+  PLAYER_DETAIL_TELEPORT_SOURCE,
+} from './bitcraft';
 import { LIVE_FRESHNESS_SECONDS } from '../config';
 
 export interface FreshnessCandidate {
@@ -9,11 +14,11 @@ export function normalizeDisplaySource(source: string | null | undefined): strin
   const baseSource = (String(source ?? '').split(';')[0] ?? '').trim();
 
   switch (baseSource) {
-    case 'player-detail-location':
+    case PLAYER_DETAIL_LOCATION_SOURCE:
       return 'detail';
-    case 'player-detail-teleport':
+    case PLAYER_DETAIL_TELEPORT_SOURCE:
       return 'detail-home';
-    case 'live.bitjita.com':
+    case BITCRAFT_LIVE_SOURCE:
     case 'live':
       return 'live';
     case '':

@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 import { FIXED_REGION_ID, MAP_SIZE, REGION_GRID, REGION_SIZE } from '../config';
 
 export interface WorldPoint {
@@ -14,28 +16,62 @@ export interface RegionBounds {
   zMax: number;
 }
 
+export interface ParsedBitcraftQuery {
+  requestedResourceIds: number[];
+  requestedCenter: WorldPoint | null;
+  requestedZoom: number | null;
+}
+
+export const BITCRAFT_WEB_ORIGIN = 'https://bitcraftmap.com';
+export const BITCRAFT_RESOURCE_API_ORIGIN = 'https://bcmap-api.bitjita.com';
+export const BITCRAFT_LIVE_WS_URL = 'wss://live.bitjita.com';
+export const BITCRAFT_LIVE_SOURCE = 'live.bitjita.com';
+export const MOBILE_ENTITY_STATE_CHANNEL = 'mobile_entity_state';
+export const PLAYER_DETAIL_LOCATION_SOURCE = 'player-detail-location';
+export const PLAYER_DETAIL_TELEPORT_SOURCE = 'player-detail-teleport';
+export const MAP_MIN_ZOOM = -2;
+export const MAP_MAX_ZOOM = 5;
+
+const positiveResourceIdSchema = z.number().int().positive();
+const queryZoomSchema = z.number().finite().min(MAP_MIN_ZOOM).max(MAP_MAX_ZOOM);
+
 export function parseIdList(raw: string | null): number[] {
   if (!raw) return [];
   return raw
     .split(',')
     .map((value) => Number(value.trim()))
-    .filter((value) => Number.isFinite(value));
+    .flatMap((value) => {
+      const parsed = positiveResourceIdSchema.safeParse(value);
+      return parsed.success ? [parsed.data] : [];
+    });
+}
+
+export function buildMobileEntityStateChannel(entityId: string): string {
+  return `${MOBILE_ENTITY_STATE_CHANNEL}:${entityId}`;
+}
+
+export function buildPlayerDetailUrl(entityId: string): string {
+  return new URL(`/api/players/${encodeURIComponent(entityId)}`, BITCRAFT_WEB_ORIGIN).toString();
+}
+
+export function buildResourceSnapshotUrl(regionId: number | string, resourceId: number | string): string {
+  return new URL(`/region${regionId}/resource/${resourceId}`, BITCRAFT_RESOURCE_API_ORIGIN).toString();
 }
 
 export function parseCenter(raw: string | null): WorldPoint | null {
   if (!raw) return null;
   const parts = raw.split(',');
   if (parts.length !== 2) return null;
-  const x = Number(parts[0]);
-  const z = Number(parts[1]);
-  if (!Number.isFinite(x) || !Number.isFinite(z)) return null;
-  return { x, z };
+  const x = Number(parts[0]?.trim());
+  const z = Number(parts[1]?.trim());
+  return parseCenterPoint({ x, z });
 }
 
 export function parseRequestedZoom(raw: string | null): number | null {
   if (!raw) return null;
   const value = Number(raw);
-  return Number.isFinite(value) ? value : null;
+  const parsed = queryZoomSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
 }
 
 export function regionIdFromCoord(x: number, z: number): number | null {
@@ -68,12 +104,25 @@ export function isInsideFixedRegion(point: WorldPoint): boolean {
 }
 
 export function makeOfficialLink(resourceIds: number[]): string {
-  const url = new URL('https://bitcraftmap.com/');
+  const url = new URL('/', BITCRAFT_WEB_ORIGIN);
   url.searchParams.set('regionId', String(FIXED_REGION_ID));
   if (resourceIds.length > 0) {
     url.searchParams.set('resourceId', resourceIds.join(','));
   }
   return url.toString();
+}
+
+export function parseBitcraftQuery(search: string | URLSearchParams): ParsedBitcraftQuery {
+  const params =
+    typeof search === 'string'
+      ? new URLSearchParams(search.startsWith('?') ? search.slice(1) : search)
+      : search;
+
+  return {
+    requestedResourceIds: parseIdList(params.get('resourceId')),
+    requestedCenter: parseCenter(params.get('center')),
+    requestedZoom: parseRequestedZoom(params.get('zoom')),
+  };
 }
 
 export function extractEntityId(channel: string | null | undefined): string | null {
@@ -99,4 +148,14 @@ export function isFiniteNumber(value: unknown): value is number {
 
 export function resolvePublicUrl(relativePath: string): string {
   return new URL(relativePath, document.baseURI).toString();
+}
+
+function parseCenterPoint(point: WorldPoint): WorldPoint | null {
+  const centerSchema = z.object({
+    x: z.number().finite().min(fixedRegionBounds.xMin).max(fixedRegionBounds.xMax),
+    z: z.number().finite().min(fixedRegionBounds.zMin).max(fixedRegionBounds.zMax),
+  });
+
+  const parsed = centerSchema.safeParse(point);
+  return parsed.success ? parsed.data : null;
 }

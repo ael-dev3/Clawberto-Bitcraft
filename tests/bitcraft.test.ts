@@ -2,8 +2,16 @@ import { describe, expect, it } from 'vitest';
 
 import { FIXED_REGION_ID, REGION_SIZE } from '../src/config';
 import {
+  BITCRAFT_LIVE_SOURCE,
+  MAP_MAX_ZOOM,
+  MAP_MIN_ZOOM,
+  PLAYER_DETAIL_LOCATION_SOURCE,
+  buildMobileEntityStateChannel,
+  buildPlayerDetailUrl,
+  buildResourceSnapshotUrl,
   getRegionBounds,
   makeOfficialLink,
+  parseBitcraftQuery,
   parseCenter,
   parseIdList,
   parseRequestedZoom,
@@ -30,16 +38,26 @@ describe('bitcraft helpers', () => {
   });
 
   it('parses query input safely', () => {
-    expect(parseIdList('1180909566, nope, 12')).toEqual([1180909566, 12]);
+    expect(parseIdList('1180909566, nope, 12, 0, -7, 12.5')).toEqual([1180909566, 12]);
     expect(parseCenter('9342.399,16389.73')).toEqual({ x: 9342.399, z: 16389.73 });
     expect(parseCenter('bad')).toBeNull();
+    expect(parseCenter('100,100')).toBeNull();
     expect(parseRequestedZoom('1.2')).toBe(1.2);
     expect(parseRequestedZoom('wat')).toBeNull();
+    expect(parseRequestedZoom(String(MAP_MIN_ZOOM - 0.1))).toBeNull();
+    expect(parseRequestedZoom(String(MAP_MAX_ZOOM + 0.1))).toBeNull();
+    expect(
+      parseBitcraftQuery('?resourceId=1180909566,12,-1&center=9342.399,16389.73&zoom=1.2'),
+    ).toEqual({
+      requestedResourceIds: [1180909566, 12],
+      requestedCenter: { x: 9342.399, z: 16389.73 },
+      requestedZoom: 1.2,
+    });
   });
 
   it('normalizes source labels and live freshness', () => {
-    expect(normalizeDisplaySource('player-detail-location')).toBe('detail');
-    expect(normalizeDisplaySource('live.bitjita.com')).toBe('live');
+    expect(normalizeDisplaySource(PLAYER_DETAIL_LOCATION_SOURCE)).toBe('detail');
+    expect(normalizeDisplaySource(BITCRAFT_LIVE_SOURCE)).toBe('live');
     expect(
       shouldKeepFreshLiveState({
         source: 'live',
@@ -50,5 +68,15 @@ describe('bitcraft helpers', () => {
 
   it('builds the official region-12 link', () => {
     expect(makeOfficialLink([1180909566])).toBe('https://bitcraftmap.com/?regionId=12&resourceId=1180909566');
+  });
+
+  it('builds shared Bitcraft endpoints and channels', () => {
+    expect(buildMobileEntityStateChannel('648518346354069088')).toBe('mobile_entity_state:648518346354069088');
+    expect(buildPlayerDetailUrl('648518346354069088')).toBe(
+      'https://bitcraftmap.com/api/players/648518346354069088',
+    );
+    expect(buildResourceSnapshotUrl(12, 1180909566)).toBe(
+      'https://bcmap-api.bitjita.com/region12/resource/1180909566',
+    );
   });
 });

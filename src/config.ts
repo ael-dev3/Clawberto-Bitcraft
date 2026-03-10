@@ -3,7 +3,6 @@ export const REGION_GRID = 5;
 export const REGION_SIZE = MAP_SIZE / REGION_GRID;
 export const APOTHEM = 2 / Math.sqrt(3);
 
-export const LIVE_WS = 'wss://live.bitjita.com';
 export const TERRAIN_PATH = './assets/terrain/region12.png';
 export const RUNTIME_AEL_CACHE_PATH = './runtime/ael-live.json';
 export const TRACKED_PLAYERS_CACHE_PATH = './runtime/tracked-players.json';

@@ -1,4 +1,4 @@
-import { LIVE_WS } from '../../config';
+import { createBitcraftLiveSocket, subscribeMobileEntityState } from '../../shared/clients/live';
 import { parseLiveStateMessage, type LiveStateSnapshot } from '../../shared/live-state';
 import { isFiniteNumber } from '../../shared/bitcraft';
 
@@ -11,11 +11,10 @@ export interface LiveFeedHandlers {
 
 export class LiveFeedService {
   connect(entityIds: string[], handlers: LiveFeedHandlers): WebSocket {
-    const ws = new WebSocket(LIVE_WS);
+    const ws = createBitcraftLiveSocket();
 
     ws.addEventListener('open', () => {
-      const channels = entityIds.map((entityId) => `mobile_entity_state:${entityId}`);
-      ws.send(JSON.stringify({ type: 'subscribe', channels }));
+      subscribeMobileEntityState(ws, entityIds);
       handlers.onOpen();
     });
 
