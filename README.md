@@ -1,117 +1,105 @@
-# Clawberto-Bitcraft
+# Clawberto Bitcraft
 
-Production-oriented Bitcraft overlay research and mapping app, modernized to a small Vite + TypeScript toolchain without changing the core Leaflet map model.
+Production-ready Bitcraft region overlay focused on Region 12, built with Vite, TypeScript, and Leaflet.
 
-## What this repo ships
+## Live Website
 
-1. A Vite-built static site for GitHub Pages
-2. A region-12-only Leaflet overlay for Ael plus tracked players
-3. Runtime JSON caches for hosted Ael and tracked-player refreshes
-4. Cached resource snapshots for region-scoped overlays
-5. Shared Zod schemas used by both the browser app and cache refresh scripts
-6. Smoke tests and unit tests for the current hosted behavior
+https://ael-dev3.github.io/Clawberto-Bitcraft/
 
-## Current app behavior
+## Overview
 
-The app still preserves the original user-facing behavior:
+Clawberto Bitcraft is a lightweight, GitHub Pages-hosted map overlay for monitoring Ael's live position in Bitcraft Region 12. The app keeps the original overlay workflow intact while moving the project onto a smaller, typed, maintainable frontend stack.
 
-- fixed region 12 terrain only
-- live Ael websocket tracking with runtime-cache fallback
-- tracked players with websocket movement updates plus player-detail fallback
-- runtime JSON refresh polling in the browser
-- manual pin placement inside region 12 only
-- map popups and collision-aware player labels
-- cached resource overlays driven by `resourceId`
-- hosted GitHub Pages deployment from built output
+The hosted build is intentionally constrained to Region 12 and avoids full-world map loading. It combines live websocket updates, cached runtime data, tracked-player overlays, and optional resource snapshots in a static deployment model that is reliable enough for public hosting.
 
-## Modernized structure
+## Highlights
+
+- Region-12-only terrain overlay with a fixed map scope
+- Live Ael position updates from websocket data with runtime-cache fallback
+- Tracked player rendering with movement updates and player-detail fallback
+- Manual pin placement for Region 12 coordinates
+- Optional cached resource overlays driven by `resourceId`
+- Query-parameter support for shareable map state
+- Static GitHub Pages deployment with automated build and publish workflow
+
+## Tech Stack
+
+- Vite
+- TypeScript
+- Leaflet
+- Zod
+- Vitest
+- Playwright-based smoke coverage
+
+## Project Structure
 
 ```text
 src/
-  app/                  app controller, map controller, typed browser modules
-  shared/               region math, schemas, websocket normalization, helpers
-  ui/                   DOM bindings and styling
+  app/                  app controller, map controller, state, services
+  shared/               schemas, region math, websocket normalization, helpers
+  ui/                   DOM bindings and styles
 public/
-  assets/terrain/       static terrain image copied into the build
+  assets/terrain/       static terrain assets
   data/                 tracked-player config and cached resource snapshots
   runtime/              hosted runtime cache JSON files
 scripts/
-  *.ts                  typed cache refresh, smoke, and utility scripts
+  *.ts                  cache refresh, smoke, and utility scripts
 tests/
-  *.test.ts             helper/schema regression coverage
+  *.test.ts             unit and regression coverage
 ```
 
-## Local development
+## Getting Started
 
-Install dependencies:
+### Install
 
 ```bash
 npm install
 ```
 
-Run the dev server:
+### Run locally
 
 ```bash
 npm run dev
 ```
 
-Create a production build:
+### Build for production
 
 ```bash
 npm run build
 ```
 
-Preview the built site locally:
+### Preview the production build
 
 ```bash
 npm run preview
 ```
 
-Run typecheck, tests, and build together:
+### Run the standard verification pass
 
 ```bash
 npm run check
 ```
 
-Run the local production smoke test:
+## Available Scripts
 
-```bash
-npm run smoke:local
-```
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start the local Vite development server |
+| `npm run build` | Create the production build |
+| `npm run preview` | Preview the built site locally |
+| `npm run typecheck` | Run TypeScript type checking |
+| `npm run test` | Run the Vitest suite |
+| `npm run check` | Run typecheck, tests, and production build |
+| `npm run update:ael-cache` | Refresh the hosted Ael runtime cache |
+| `npm run update:tracked-cache` | Refresh the hosted tracked-player runtime cache |
+| `npm run query:ael-live` | Inspect Ael live websocket payloads |
+| `npm run fetch:resource -- <regionId> <resourceId>` | Fetch and store a resource snapshot |
+| `npm run smoke:local` | Run the local smoke test against a local build |
+| `npm run smoke:hosted` | Run the smoke test against the live GitHub Pages site |
 
-## Runtime cache refresh scripts
+## Query Parameters
 
-Refresh the hosted Ael cache:
-
-```bash
-npm run update:ael-cache
-```
-
-Refresh the tracked-player cache:
-
-```bash
-npm run update:tracked-cache
-```
-
-Inspect Ael's live websocket payloads:
-
-```bash
-npm run query:ael-live
-```
-
-Add another cached resource snapshot:
-
-```bash
-npm run fetch:resource -- 12 1180909566
-```
-
-That writes to:
-
-```text
-public/data/resources/12/1180909566.json
-```
-
-## Query params
+The hosted app accepts a small set of URL parameters for reproducible views:
 
 - `resourceId=1180909566`
 - `center=9342.399,16389.730`
@@ -119,43 +107,57 @@ public/data/resources/12/1180909566.json
 
 Notes:
 
-- the build is fixed to `regionId=12`
-- centers outside region 12 are ignored
+- The production build is fixed to `regionId=12`
+- Coordinates outside Region 12 are ignored
 
-## GitHub Pages deployment
+## Resource Snapshot Workflow
 
-The production site is built with `base: './'`, so generated asset URLs stay relative and continue working on GitHub Pages subpaths.
+To cache an additional resource snapshot locally:
 
-The Pages workflow now:
+```bash
+npm run fetch:resource -- 12 1180909566
+```
 
-1. installs dependencies
-2. refreshes the runtime cache JSON files
-3. builds the site into `dist/`
-4. uploads `dist/` to GitHub Pages
+This writes the snapshot to:
 
-## Research summary
+```text
+public/data/resources/12/1180909566.json
+```
 
-The repo still uses the same verified Bitcraft data path:
+## Deployment
 
-- player detail from `https://bitcraftmap.com/api/players/:entityId`
-- live movement from `wss://live.bitjita.com`
-- region resource data from `https://bcmap-api.bitjita.com/region{regionId}/resource/{resourceId}`
+The site is deployed to GitHub Pages from `main` through the workflow in `.github/workflows/pages.yml`.
 
-Coordinates from the live websocket remain scaled by `1000`, so the overlay still converts:
+Deployment pipeline:
+
+1. Install dependencies
+2. Refresh runtime cache JSON files
+3. Build the production site into `dist/`
+4. Upload the artifact to GitHub Pages
+5. Publish the latest build
+
+The Vite config uses `base: './'` so asset URLs stay relative and continue working under the repository Pages subpath.
+
+## Data Sources
+
+The current overlay behavior is built around the same Bitcraft data path used during the research phase:
+
+- Live movement feed: `wss://live.bitjita.com`
+- Player detail API: `https://bitcraftmap.com/api/players/:entityId`
+- Region resource API: `https://bcmap-api.bitjita.com/region{regionId}/resource/{resourceId}`
+
+Resource API responses are CORS-restricted to `bitcraftmap.com`, so this project stores example resource snapshots locally for hosted usage.
+
+## Coordinate Notes
+
+Live websocket coordinates are scaled by `1000`, so the overlay converts:
 
 ```text
 display_x = location_x / 1000
 display_z = location_z / 1000
 ```
 
-Region math is unchanged:
-
-```text
-region_size = 38400 / 5 = 7680
-regionId = floor(z / 7680) * 5 + floor(x / 7680) + 1
-```
-
-Region 12 bounds remain:
+Region 12 bounds:
 
 ```text
 x: 7680 .. 15360
