@@ -25,10 +25,15 @@ const ws = createBitcraftLiveSocket();
 let latestLiveSnapshot: LiveStateSnapshot | null = null;
 let pendingCandidate: PendingLiveCandidate | null = null;
 let settled = false;
+let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
 const finish = async (reason: string) => {
   if (settled) return;
   settled = true;
+  if (timeoutId) {
+    clearTimeout(timeoutId);
+    timeoutId = null;
+  }
 
   try {
     ws.close();
@@ -76,53 +81,59 @@ const finish = async (reason: string) => {
   throw new Error(`No live event captured, no player detail, and no previous cache to retain (${reason})`);
 };
 
-ws.addEventListener('open', () => {
-  subscribeMobileEntityState(ws, [entityId]);
+await new Promise<void>((resolve, reject) => {
+  const finalize = (reason: string) => {
+    void finish(reason).then(resolve, reject);
+  };
+
+  ws.addEventListener('open', () => {
+    subscribeMobileEntityState(ws, [entityId]);
+  });
+
+  ws.addEventListener('message', (event) => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(event.data) as unknown;
+    } catch (error) {
+      console.warn('invalid websocket payload', error);
+      return;
+    }
+
+    const liveSnapshot = parseLiveStateMessage(parsed, 'Ael runtime websocket payload');
+    if (!liveSnapshot || !isFiniteNumber(liveSnapshot.x) || !isFiniteNumber(liveSnapshot.z)) {
+      return;
+    }
+
+    if (!isInsideFixedRegion({ x: liveSnapshot.x, z: liveSnapshot.z })) {
+      return;
+    }
+
+    const trustDecision = decideLiveUpdateTrust(
+      entityId,
+      toPlayerRecord(latestLiveSnapshot) ?? toPlayerRecord(detailBaseline) ?? toPlayerRecord(previous),
+      liveSnapshot,
+      pendingCandidate,
+    );
+    pendingCandidate = trustDecision.nextPending;
+    if (!trustDecision.accept) {
+      return;
+    }
+
+    latestLiveSnapshot = liveSnapshot;
+  });
+
+  ws.addEventListener('error', () => {
+    finalize('error');
+  });
+
+  ws.addEventListener('close', () => {
+    finalize('close');
+  });
+
+  timeoutId = setTimeout(() => {
+    finalize('timeout');
+  }, 15_000);
 });
-
-ws.addEventListener('message', (event) => {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(event.data) as unknown;
-  } catch (error) {
-    console.warn('invalid websocket payload', error);
-    return;
-  }
-
-  const liveSnapshot = parseLiveStateMessage(parsed, 'Ael runtime websocket payload');
-  if (!liveSnapshot || !isFiniteNumber(liveSnapshot.x) || !isFiniteNumber(liveSnapshot.z)) {
-    return;
-  }
-
-  if (!isInsideFixedRegion({ x: liveSnapshot.x, z: liveSnapshot.z })) {
-    return;
-  }
-
-  const trustDecision = decideLiveUpdateTrust(
-    entityId,
-    toPlayerRecord(latestLiveSnapshot) ?? toPlayerRecord(detailBaseline) ?? toPlayerRecord(previous),
-    liveSnapshot,
-    pendingCandidate,
-  );
-  pendingCandidate = trustDecision.nextPending;
-  if (!trustDecision.accept) {
-    return;
-  }
-
-  latestLiveSnapshot = liveSnapshot;
-});
-
-ws.addEventListener('error', async () => {
-  await finish('error');
-});
-
-ws.addEventListener('close', async () => {
-  await finish('close');
-});
-
-setTimeout(async () => {
-  await finish('timeout');
-}, 15_000);
 
 function toPlayerRecord(snapshot: LiveStateSnapshot | AelRuntimeCache | null): PlayerRecord | null {
   if (!snapshot || !isFiniteNumber(snapshot.x) || !isFiniteNumber(snapshot.z)) {

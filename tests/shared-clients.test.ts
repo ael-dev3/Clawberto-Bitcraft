@@ -85,6 +85,29 @@ describe('shared clients', () => {
     });
   });
 
+  it('prefers the region derived from coordinates over a conflicting API region id', () => {
+    expect(
+      normalizePlayerDetailState({
+        player: {
+          regionId: 12,
+          locationX: 48,
+          locationZ: 18,
+          teleportLocationX: null,
+          teleportLocationZ: null,
+          signedIn: true,
+          lastLoginTimestamp: '2026-04-21T09:29:10.000Z',
+        },
+      }),
+    ).toEqual({
+      x: 48,
+      z: 18,
+      regionId: 1,
+      source: PLAYER_DETAIL_LOCATION_SOURCE,
+      signedIn: true,
+      lastLoginTimestamp: '2026-04-21T09:29:10.000Z',
+    });
+  });
+
   it('fetches resource snapshots through the shared client', async () => {
     vi.stubGlobal(
       'fetch',

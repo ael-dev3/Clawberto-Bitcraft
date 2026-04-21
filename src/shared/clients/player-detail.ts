@@ -33,10 +33,11 @@ export function normalizePlayerDetailState(
   }
 
   if (typeof player.locationX === 'number' && typeof player.locationZ === 'number') {
+    const derivedRegionId = regionIdFromCoord(player.locationX, player.locationZ);
     return {
       x: player.locationX,
       z: player.locationZ,
-      regionId: player.regionId ?? regionIdFromCoord(player.locationX, player.locationZ) ?? defaultRegionId ?? null,
+      regionId: derivedRegionId ?? player.regionId ?? defaultRegionId ?? null,
       source: PLAYER_DETAIL_LOCATION_SOURCE,
       signedIn: player.signedIn ?? null,
       lastLoginTimestamp: player.lastLoginTimestamp ?? null,
@@ -44,14 +45,11 @@ export function normalizePlayerDetailState(
   }
 
   if (typeof player.teleportLocationX === 'number' && typeof player.teleportLocationZ === 'number') {
+    const derivedRegionId = regionIdFromCoord(player.teleportLocationX, player.teleportLocationZ);
     return {
       x: player.teleportLocationX,
       z: player.teleportLocationZ,
-      regionId:
-        player.regionId ??
-        regionIdFromCoord(player.teleportLocationX, player.teleportLocationZ) ??
-        defaultRegionId ??
-        null,
+      regionId: derivedRegionId ?? player.regionId ?? defaultRegionId ?? null,
       source: PLAYER_DETAIL_TELEPORT_SOURCE,
       signedIn: player.signedIn ?? null,
       lastLoginTimestamp: player.lastLoginTimestamp ?? null,

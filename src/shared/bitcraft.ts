@@ -96,7 +96,7 @@ export function getRegionBounds(regionId: number): RegionBounds {
 export const fixedRegionBounds = getRegionBounds(FIXED_REGION_ID);
 
 export function isInsideRegion(point: WorldPoint, region: RegionBounds): boolean {
-  return point.x >= region.xMin && point.x <= region.xMax && point.z >= region.zMin && point.z <= region.zMax;
+  return point.x >= region.xMin && point.x < region.xMax && point.z >= region.zMin && point.z < region.zMax;
 }
 
 export function isInsideFixedRegion(point: WorldPoint): boolean {
@@ -152,8 +152,8 @@ export function resolvePublicUrl(relativePath: string): string {
 
 function parseCenterPoint(point: WorldPoint): WorldPoint | null {
   const centerSchema = z.object({
-    x: z.number().finite().min(fixedRegionBounds.xMin).max(fixedRegionBounds.xMax),
-    z: z.number().finite().min(fixedRegionBounds.zMin).max(fixedRegionBounds.zMax),
+    x: z.number().finite().min(fixedRegionBounds.xMin).lt(fixedRegionBounds.xMax),
+    z: z.number().finite().min(fixedRegionBounds.zMin).lt(fixedRegionBounds.zMax),
   });
 
   const parsed = centerSchema.safeParse(point);

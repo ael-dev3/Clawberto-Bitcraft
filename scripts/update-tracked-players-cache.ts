@@ -31,13 +31,18 @@ for (const player of players) {
 
 const mergedById = new Map(merged.map((row) => [String(row.entityId), row]));
 
-await new Promise<void>((resolve) => {
+await new Promise<void>((resolve, reject) => {
   const ws = createBitcraftLiveSocket();
   let settled = false;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
   const finish = async () => {
     if (settled) return;
     settled = true;
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
 
     try {
       ws.close();
@@ -47,6 +52,23 @@ await new Promise<void>((resolve) => {
     await writeJsonFile(runtimePath, output);
     console.log(`updated runtime tracked players cache (${mergedById.size} players)`);
     resolve();
+  };
+
+  const fail = (error: unknown) => {
+    if (settled) {
+      return;
+    }
+
+    settled = true;
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+    reject(error);
+  };
+
+  const finalize = () => {
+    void finish().catch(fail);
   };
 
   ws.addEventListener('open', () => {
@@ -94,15 +116,15 @@ await new Promise<void>((resolve) => {
   });
 
   ws.addEventListener('error', () => {
-    void finish();
+    finalize();
   });
 
   ws.addEventListener('close', () => {
-    void finish();
+    finalize();
   });
 
-  setTimeout(() => {
-    void finish();
+  timeoutId = setTimeout(() => {
+    finalize();
   }, 15_000);
 });
 

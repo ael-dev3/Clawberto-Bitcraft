@@ -10,6 +10,7 @@ import {
   buildPlayerDetailUrl,
   buildResourceSnapshotUrl,
   getRegionBounds,
+  isInsideFixedRegion,
   makeOfficialLink,
   parseBitcraftQuery,
   parseCenter,
@@ -35,6 +36,15 @@ describe('bitcraft helpers', () => {
   it('maps world coordinates into the expected region id', () => {
     expect(regionIdFromCoord(9342.399, 16389.73)).toBe(12);
     expect(regionIdFromCoord(-1, 100)).toBeNull();
+  });
+
+  it('treats region upper bounds as exclusive to avoid cross-region ambiguity', () => {
+    expect(isInsideFixedRegion({ x: 7680, z: 15360 })).toBe(true);
+    expect(isInsideFixedRegion({ x: 15359.999, z: 23039.999 })).toBe(true);
+    expect(isInsideFixedRegion({ x: 15360, z: 16389.73 })).toBe(false);
+    expect(isInsideFixedRegion({ x: 9342.399, z: 23040 })).toBe(false);
+    expect(parseCenter('15360,16389.73')).toBeNull();
+    expect(parseCenter('9342.399,23040')).toBeNull();
   });
 
   it('parses query input safely', () => {
